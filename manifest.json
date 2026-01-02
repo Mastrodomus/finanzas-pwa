@@ -1,9 +1,9 @@
 {
   "name": "Finanzas",
   "short_name": "Finanzas",
-  "start_url": "./",
+  "start_url": "/finanzas-pwa/",
+  "scope": "/finanzas-pwa/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ffffff",
-  "icons": []
+  "theme_color": "#ffffff"
 }
