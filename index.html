@@ -1,103 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
   <title>Finanzas (offline)</title>
 
-  <!-- PWA -->
   <link rel="manifest" href="./manifest.json" />
-  <meta name="theme-color" content="#1f2937" />
-
-  <!-- iOS support -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Finanzas" />
-
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-      margin: 16px;
-      max-width: 720px;
-    }
-
-    h1, h2 {
-      margin-bottom: 8px;
-    }
-
-    label {
-      display: block;
-      margin-top: 8px;
-    }
-
-    input, select, button {
-      margin-top: 4px;
-      padding: 6px;
-      font-size: 14px;
-    }
-
-    button {
-      cursor: pointer;
-    }
-
-    hr {
-      margin: 24px 0;
-    }
-
-    pre {
-      background: #f3f4f6;
-      padding: 12px;
-      overflow-x: auto;
-    }
-  </style>
 </head>
-
 <body>
-
-  <h1>Finanzas (offline)</h1>
-
-  <!-- ===== BLOQUE BÁSICO ===== -->
-  <label>
-    Ingresos:
-    <input id="ing" type="number" placeholder="Ingresos" />
-  </label>
-
-  <label>
-    Egresos:
-    <input id="egr" type="number" placeholder="Egresos" />
-  </label>
-
-  <button id="btn">Calcular</button>
-
-  <pre id="out"></pre>
-
-  <hr />
-
-  <!-- ===== ESCENARIOS ===== -->
-  <h2>Escenarios</h2>
-
-  <label>
-    Nombre:
-    <input id="scenarioName" type="text" placeholder="Ej: Base enero" />
-  </label>
-
-  <button id="saveScenario">Guardar</button>
-  <button id="newScenario">Nuevo</button>
-
-  <br /><br />
-
-  <label>
-    Cargar:
-    <select id="scenarioList"></select>
-  </label>
-
-  <button id="loadScenario">Cargar</button>
-  <button id="deleteScenario">Eliminar</button>
-
-  <!-- ===== APP ===== -->
+  <!-- app.js crea toda la interfaz -->
+  <script src="./engine.js"></script>
   <script src="./app.js"></script>
-
 </body>
 </html>
