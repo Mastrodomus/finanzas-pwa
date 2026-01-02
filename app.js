@@ -1609,6 +1609,8 @@ function onClick(id, fn) {
 
 function wire() {
   ensureUI();
+const b = byId("btnDrawCurves");
+if (b) b.addEventListener("click", drawScenarioCurves);
 
   // Defaults
   writeStateToUI(deepClone(DEFAULT_STATE));
