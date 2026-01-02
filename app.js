@@ -1,30 +1,25 @@
-/* app.js (actualizado, “todo incluido”)
-   Objetivo: replicar el flujo de tu app Python (Inputs → Resultados → JSON + escenarios),
-   usando el motor portado en engine.js: window.FinanceEngine.buildCashflowTable(S)
-
-   Requisito ÚNICO en index.html:
-     <script src="engine.js"></script>
-     <script src="app.js"></script>
-
-   Este app.js:
-   - Crea la UI completa si tu HTML no la trae (no dependemos de ids previos)
-   - Lee/escribe el estado S (mismo shape que default_state() de Python)
-   - Calcula KPIs + tabla mensual
-   - Maneja escenarios (guardar/cargar/eliminar)
-   - Import/Export JSON (copiar/pegar + archivo)
-   - Funciona offline (no requiere backend)
+/* app.js (completo, listo para copiar/pegar)
+   - UI completa (no depende de HTML previo)
+   - Lee/escribe estado S (shape igual a default_state() Python)
+   - KPIs + tabla mensual
+   - CapEx multi-mes (tabla dinámica)
+   - Escenarios (guardar/cargar/eliminar) en localStorage
+   - Import/Export JSON (textarea + archivo + descarga)
+   - Registro SW (PWA) si existe sw.js
+   Requiere en index.html:
+     <script src="./engine.js"></script>
+     <script src="./app.js"></script>
 */
 
 "use strict";
 
 /* --------------------------
-   0) PWA SW register (si ya lo tenés en otro lado, no molesta)
+   0) PWA SW register
 ---------------------------*/
 (function registerSW() {
   try {
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        // Ajuste: si tu repo es /finanzas-pwa/ en GitHub Pages, este path funciona bien:
         navigator.serviceWorker.register("./sw.js").catch(() => {});
       });
     }
@@ -32,7 +27,7 @@
 })();
 
 /* --------------------------
-   1) Default state (idéntico a default_state() del Python)
+   1) Default state (idéntico a default_state() Python)
 ---------------------------*/
 const DEFAULT_STATE = {
   project: { name: "Resonador", start_yyyymm: "2026-01", horizon_months: 60, tax_rate: 0.30 },
@@ -117,14 +112,29 @@ function byId(id) { return document.getElementById(id); }
    4) UI: se crea completa (no depende de tu HTML)
 ---------------------------*/
 function ensureUI() {
-  // Si ya existe un root, no duplicamos.
   let root = byId("appRoot");
   if (root) return root;
 
-  root = el("div", { id: "appRoot", style: { maxWidth: "1100px", margin: "0 auto", padding: "16px", fontFamily: "system-ui, Segoe UI, Arial" } });
+  root = el("div", {
+    id: "appRoot",
+    style: {
+      maxWidth: "1100px",
+      margin: "0 auto",
+      padding: "16px",
+      fontFamily: "system-ui, Segoe UI, Arial",
+      lineHeight: "1.3",
+    }
+  });
 
   const topBar = el("div", {
-    style: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }
+    style: {
+      display: "flex",
+      gap: "12px",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: "12px"
+    }
   }, [
     el("div", {}, [
       el("div", { style: { fontSize: "20px", fontWeight: "700" } }, ["Modelo de inversión (offline)"]),
@@ -161,7 +171,6 @@ function ensureUI() {
   buildResultsView(viewResults);
   buildJSONView(viewJSON);
 
-  // Tab switching
   function activate(tab) {
     viewInputs.style.display = tab === "inputs" ? "" : "none";
     viewResults.style.display = tab === "results" ? "" : "none";
@@ -171,21 +180,23 @@ function ensureUI() {
   byId("tabResults").addEventListener("click", () => activate("results"));
   byId("tabJSON").addEventListener("click", () => activate("json"));
 
-  // Default tab
   activate("inputs");
-
   return root;
 }
 
 function section(title, children = []) {
-  return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" } }, [
+  return el("div", {
+    style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" }
+  }, [
     el("div", { style: { fontWeight: "700", marginBottom: "8px" } }, [title]),
     ...children
   ]);
 }
 
 function grid(children = []) {
-  return el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" } }, children);
+  return el("div", {
+    style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }
+  }, children);
 }
 
 function field(label, id, type = "number", step = "any") {
@@ -196,11 +207,10 @@ function field(label, id, type = "number", step = "any") {
 }
 
 function checkbox(label, id) {
-  const wrap = el("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" } }, [
+  return el("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" } }, [
     el("input", { id, type: "checkbox" }),
     el("span", { style: { fontWeight: "600" } }, [label])
   ]);
-  return wrap;
 }
 
 function selectField(label, id, options) {
@@ -213,7 +223,77 @@ function selectField(label, id, options) {
 }
 
 /* --------------------------
-   5) Build views
+   5) CapEx table helpers
+---------------------------*/
+function renderCapexTable(rows) {
+  const host = byId("capexTable");
+  if (!host) return;
+  host.innerHTML = "";
+
+  const data = Array.isArray(rows) && rows.length ? rows : deepClone(DEFAULT_STATE.capex);
+
+  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
+  const thead = el("thead");
+  thead.appendChild(el("tr", {}, [
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["month_index"]),
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["item"]),
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["amount"]),
+    el("th", { style: { borderBottom: "1px solid #ddd", padding: "6px" } }, [""]),
+  ]));
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  data.forEach((r, idx) => {
+    const mi = el("input", { type: "number", step: "1", value: String(r.month_index ?? 0), "data-capex": "mi" });
+    const it = el("input", { type: "text", value: String(r.item ?? ""), "data-capex": "item" });
+    const am = el("input", { type: "number", step: "any", value: String(r.amount ?? 0), "data-capex": "amt" });
+
+    const del = el("button", {
+      type: "button",
+      onclick: () => {
+        const current = readCapexFromTable();
+        current.splice(idx, 1);
+        renderCapexTable(current.length ? current : [{ month_index: 0, item: "Inversión inicial", amount: 0 }]);
+      }
+    }, ["Eliminar"]);
+
+    tbody.appendChild(el("tr", {}, [
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [mi]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [it]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [am]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [del]),
+    ]));
+  });
+
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function readCapexFromTable() {
+  const host = byId("capexTable");
+  if (!host) return deepClone(DEFAULT_STATE.capex);
+
+  const rows = [];
+  const trs = host.querySelectorAll("tbody tr");
+  trs.forEach((tr) => {
+    const mi = tr.querySelector('input[data-capex="mi"]');
+    const it = tr.querySelector('input[data-capex="item"]');
+    const am = tr.querySelector('input[data-capex="amt"]');
+
+    const month_index = Math.trunc(Number(mi?.value ?? 0));
+    const item = String(it?.value ?? "").trim() || "CapEx";
+    const amount = Number(am?.value ?? 0);
+
+    if (Number.isFinite(month_index) && Number.isFinite(amount)) {
+      rows.push({ month_index: Math.max(0, month_index), item, amount });
+    }
+  });
+
+  return rows.length ? rows : deepClone(DEFAULT_STATE.capex);
+}
+
+/* --------------------------
+   6) Build views
 ---------------------------*/
 function buildInputsView(host) {
   // Escenarios
@@ -267,9 +347,7 @@ function buildInputsView(host) {
 
   // WC
   const secWC = section("4) Capital de trabajo (DSO/DPO/DIO)", [
-    el("div", { style: { marginBottom: "8px" } }, [
-      checkbox("Habilitar WC", "wc_enabled")
-    ]),
+    el("div", { style: { marginBottom: "8px" } }, [ checkbox("Habilitar WC", "wc_enabled") ]),
     grid([
       field("DSO", "dso", "number", "1"),
       field("DPO", "dpo", "number", "1"),
@@ -292,27 +370,23 @@ function buildInputsView(host) {
     el("div", { id: "waccCaption", style: { marginTop: "8px", fontSize: "12px", opacity: "0.85" } }, [""])
   ]);
 
-  // CapEx (tabla multi-mes, como Python)
+  // CapEx multi-mes
   const capexTable = el("div", { id: "capexTable" });
-
   const capexBtnRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" } }, [
     el("button", { id: "btnCapexAdd", type: "button" }, ["+ Fila"]),
     el("button", { id: "btnCapexClear", type: "button" }, ["Reset CapEx"]),
   ]);
-
   const secCapex = section("6) CapEx (multi-mes)", [
     el("div", { style: { fontSize: "12px", opacity: "0.85", marginBottom: "8px" } }, [
       "month_index: 0 = mes inicial. Podés cargar múltiples inversiones o reintegros (monto negativo)."
     ]),
     capexTable,
-    capexBtnRow,
+    capexBtnRow
   ]);
 
   // Deuda
   const secFin = section("7) Financiamiento (opcional)", [
-    el("div", { style: { marginBottom: "8px" } }, [
-      checkbox("Usar deuda", "fin_enabled")
-    ]),
+    el("div", { style: { marginBottom: "8px" } }, [ checkbox("Usar deuda", "fin_enabled") ]),
     grid([
       field("Deuda inicial D0 (USD)", "debt_amount_0", "number", "1"),
       field("Tasa anual deuda", "interest_rate_annual", "number", "0.0001"),
@@ -323,9 +397,7 @@ function buildInputsView(host) {
         { value: "german", text: "german" },
       ]),
     ]),
-    el("div", { style: { marginTop: "8px" } }, [
-      checkbox("Escudo fiscal (interés)", "tax_shield_enabled")
-    ])
+    el("div", { style: { marginTop: "8px" } }, [ checkbox("Escudo fiscal (interés)", "tax_shield_enabled") ])
   ]);
 
   host.appendChild(scRow);
@@ -340,7 +412,6 @@ function buildInputsView(host) {
 }
 
 function buildResultsView(host) {
-  // KPIs cards
   const kpiGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" } });
 
   function kpiCard(title, id) {
@@ -399,7 +470,7 @@ function buildJSONView(host) {
 }
 
 /* --------------------------
-   6) UI <-> State
+   7) UI <-> State
 ---------------------------*/
 function readNum(id, def = 0) {
   const e = byId(id);
@@ -509,8 +580,7 @@ function writeStateToUI(S) {
   writeVal("spread", S.wacc.spread);
   writeVal("wacc_tax_rate", S.wacc.tax_rate);
 
-  const cap0 = (S.capex && S.capex[0]) ? S.capex[0].amount : DEFAULT_STATE.capex[0].amount;
-  writeVal("capex0_amount", cap0);
+  renderCapexTable(S.capex);
 
   writeVal("fin_enabled", S.fin.enabled);
   writeVal("debt_amount_0", S.fin.debt_amount_0);
@@ -522,7 +592,7 @@ function writeStateToUI(S) {
 }
 
 /* --------------------------
-   7) Validación (equivalente a validate_inputs, suficiente para uso)
+   8) Validación
 ---------------------------*/
 function validateInputs(S) {
   const errors = [];
@@ -551,6 +621,16 @@ function validateInputs(S) {
     if (!["french", "german"].includes(S.fin.amortization_type)) errors.push("Sistema debe ser french/german.");
   }
 
+  // CapEx validation
+  if (!Array.isArray(S.capex) || S.capex.length === 0) {
+    warns.push("CapEx vacío: se asume 0.");
+  } else {
+    for (const r of S.capex) {
+      if (!Number.isFinite(r.month_index) || r.month_index < 0) errors.push("CapEx: month_index no puede ser negativo.");
+      if (!Number.isFinite(r.amount)) errors.push("CapEx: amount inválido.");
+    }
+  }
+
   return { errors, warns };
 }
 
@@ -571,7 +651,7 @@ function renderMessages(errors, warns) {
 }
 
 /* --------------------------
-   8) Render resultados
+   9) Render resultados
 ---------------------------*/
 function setText(id, text) {
   const n = byId(id);
@@ -603,7 +683,6 @@ function renderKPIs(res) {
   const fcfeSum = Array.isArray(res.fcfe) ? res.fcfe.reduce((a, b) => a + b, 0) : NaN;
   setText("r_fcfe_sum", fmtMoney(fcfeSum));
 
-  // Alerts estilo CFO (como tu Python)
   const alertsBox = byId("alertsBox");
   alertsBox.innerHTML = "";
   const alerts = [];
@@ -663,7 +742,7 @@ function renderTable(df) {
 }
 
 /* --------------------------
-   9) Cálculo principal
+   10) Cálculo principal
 ---------------------------*/
 function doCalc() {
   if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
@@ -680,18 +759,12 @@ function doCalc() {
 
   const res = window.FinanceEngine.buildCashflowTable(S);
 
-  // Volcar resultados y tabla
   renderKPIs(res);
   renderTable(res.df);
 
-  // Cambiar a pestaña Resultados automáticamente
   byId("tabResults").click();
 
-  // Guardar JSON actualizado en pestaña JSON (sin descargar)
-  const payload = {
-    ...deepClone(S),
-    meta: { exported_at: new Date().toISOString() }
-  };
+  const payload = { ...deepClone(S), meta: { exported_at: new Date().toISOString() } };
   const area = byId("jsonArea");
   if (area) area.value = JSON.stringify(payload, null, 2);
 
@@ -699,7 +772,7 @@ function doCalc() {
 }
 
 /* --------------------------
-   10) Escenarios
+   11) Escenarios
 ---------------------------*/
 function refreshScenarioList(selected = "") {
   const list = byId("scList");
@@ -767,14 +840,15 @@ function deleteScenario() {
 }
 
 function newScenario() {
-  writeStateToUI(deepClone(DEFAULT_STATE));
+  const init = deepClone(DEFAULT_STATE);
+  writeStateToUI(init);
   byId("scName").value = "";
-  renderWaccCaption(readStateFromUI());
+  renderWaccCaption(init);
   renderMessages([], []);
 }
 
 /* --------------------------
-   11) JSON Import/Export
+   12) JSON Import/Export
 ---------------------------*/
 function exportJSONToArea() {
   const S = readStateFromUI();
@@ -787,10 +861,8 @@ function importJSONFromArea() {
   let payload;
   try { payload = JSON.parse(txt); } catch { alert("JSON inválido."); return; }
 
-  // Aceptamos dos formatos: {S:{...}} o {...directo...}
   const S = payload.S ? payload.S : payload;
 
-  // Validación mínima de shape
   if (!S.project || !S.rev || !S.cost || !S.wc || !S.wacc || !S.capex || !S.fin) {
     alert("JSON no tiene la estructura esperada (project/rev/cost/wc/wacc/capex/fin).");
     return;
@@ -830,105 +902,44 @@ function loadJSONFile() {
 }
 
 /* --------------------------
-   12) Wire up
+   13) Wire up
 ---------------------------*/
 function wire() {
   ensureUI();
 
-  // Cargar defaults
-  writeStateToUI(deepClone(DEFAULT_STATE));
-  renderWaccCaption(readStateFromUI());
+  const init = deepClone(DEFAULT_STATE);
+  writeStateToUI(init);
+  renderWaccCaption(init);
 
-  // Escenarios list
   refreshScenarioList("");
 
-  // Botones
   byId("btnCalc").addEventListener("click", doCalc);
-  byId("btnReset").addEventListener("click", () => { newScenario(); });
+  byId("btnReset").addEventListener("click", () => newScenario());
 
   byId("btnSaveSc").addEventListener("click", saveScenario);
   byId("btnLoadSc").addEventListener("click", loadScenario);
   byId("btnDelSc").addEventListener("click", deleteScenario);
   byId("btnNewSc").addEventListener("click", newScenario);
 
-  // JSON
   byId("btnExportJSON").addEventListener("click", exportJSONToArea);
   byId("btnImportJSON").addEventListener("click", importJSONFromArea);
   byId("btnDownloadJSON").addEventListener("click", downloadJSON);
   byId("btnLoadFileJSON").addEventListener("click", loadJSONFile);
 
-  // Recalcular WACC caption al tocar inputs WACC (básico)
+  // WACC caption live
   const waccIds = ["e_pct","d_pct","rf","mrp","beta","spread","wacc_tax_rate"];
-  for (const id of waccIds) {
-    byId(id).addEventListener("input", () => renderWaccCaption(readStateFromUI()));
-  }
+  for (const id of waccIds) byId(id).addEventListener("input", () => renderWaccCaption(readStateFromUI()));
+
+  // CapEx buttons
+  byId("btnCapexAdd").addEventListener("click", () => {
+    const cur = readCapexFromTable();
+    cur.push({ month_index: 0, item: "CapEx", amount: 0 });
+    renderCapexTable(cur);
+  });
+
+  byId("btnCapexClear").addEventListener("click", () => {
+    renderCapexTable(deepClone(DEFAULT_STATE.capex));
+  });
 }
 
 window.addEventListener("load", wire);
-
-function renderCapexTable(rows) {
-  const host = byId("capexTable");
-  if (!host) return;
-  host.innerHTML = "";
-
-  const data = Array.isArray(rows) && rows.length ? rows : deepClone(DEFAULT_STATE.capex);
-
-  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
-  const thead = el("thead");
-  thead.appendChild(el("tr", {}, [
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["month_index"]),
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["item"]),
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["amount"]),
-    el("th", { style: { borderBottom: "1px solid #ddd", padding: "6px" } }, [""]),
-  ]));
-  table.appendChild(thead);
-
-  const tbody = el("tbody");
-  data.forEach((r, idx) => {
-    const mi = el("input", { type: "number", step: "1", value: String(r.month_index ?? 0), "data-capex": "mi" });
-    const it = el("input", { type: "text", value: String(r.item ?? ""), "data-capex": "item" });
-    const am = el("input", { type: "number", step: "any", value: String(r.amount ?? 0), "data-capex": "amt" });
-
-    const del = el("button", {
-      type: "button",
-      onclick: () => {
-        const current = readCapexFromTable();
-        current.splice(idx, 1);
-        renderCapexTable(current.length ? current : [{ month_index: 0, item: "Inversión inicial", amount: 0 }]);
-      }
-    }, ["Eliminar"]);
-
-    tbody.appendChild(el("tr", {}, [
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [mi]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [it]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [am]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [del]),
-    ]));
-  });
-
-  table.appendChild(tbody);
-  host.appendChild(table);
-}
-
-function readCapexFromTable() {
-  const host = byId("capexTable");
-  if (!host) return deepClone(DEFAULT_STATE.capex);
-
-  const rows = [];
-  const trs = host.querySelectorAll("tbody tr");
-  trs.forEach((tr) => {
-    const mi = tr.querySelector('input[data-capex="mi"]');
-    const it = tr.querySelector('input[data-capex="item"]');
-    const am = tr.querySelector('input[data-capex="amt"]');
-
-    const month_index = Math.trunc(Number(mi?.value ?? 0));
-    const item = String(it?.value ?? "").trim() || "CapEx";
-    const amount = Number(am?.value ?? 0);
-
-    if (Number.isFinite(month_index) && Number.isFinite(amount)) {
-      rows.push({ month_index: Math.max(0, month_index), item, amount });
-    }
-  });
-
-  return rows.length ? rows : deepClone(DEFAULT_STATE.capex);
-}
