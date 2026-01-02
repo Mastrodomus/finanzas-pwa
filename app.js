@@ -31,7 +31,7 @@
    Nota: si querés “Resonador” como default, cambiá acá.
 ---------------------------*/
 const DEFAULT_STATE = {
-  project: { name: "Proyecto", start_yyyymm: "2026-01", horizon_months: , tax_rate: 0.00 },
+  project: { name: "Proyecto", start_yyyymm: "2026-01", horizon_months: 0 , tax_rate: 0.00 },
   rev: {
     volume_0: 0.0,
     volume_growth_m: 0.00,
