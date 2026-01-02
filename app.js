@@ -317,6 +317,17 @@ function buildInputsView(host) {
   host.appendChild(secFin);
 }
 
+  // ---- Comparación de escenarios ----
+  const compareHost = el("div", {
+    id: "view_compare",
+    style: { marginTop: "24px" }
+  });
+
+  host.appendChild(compareHost);
+
+  buildCompareView(compareHost);
+
+
 function buildResultsView(host) {
   const kpiGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" } });
   function kpiCard(title, id) {
