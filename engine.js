@@ -1,12 +1,7 @@
 /* engine.js
- * Motor financiero (port de app.py):
- * - WACC (mensual) + VAN + TIR (mensual/anual eq) + Payback + Payback descontado
- * - Tabla mensual: volumen, precio, ingresos, opex, EBITDA, impuestos, ΔWC, CapEx, FCFF
- * - Capa CFO opcional: deuda (francesa/alemana con gracia), FCFE, DSCR, buffer equity
- *
+ * Motor financiero (port de app.py)
  * Se expone como window.FinanceEngine
  */
-
 (function (global) {
   "use strict";
 
@@ -18,8 +13,12 @@
     return isFiniteNum(v) ? v : def;
   }
 
+  function safeInt(x, def = 0) {
+    const v = Number(x);
+    return Number.isInteger(v) ? v : (isFiniteNum(v) ? Math.trunc(v) : def);
+  }
+
   function annualToMonthly(i_a) {
-    // (1+i_a)^(1/12)-1
     return Math.pow(1 + i_a, 1 / 12) - 1;
   }
 
@@ -32,7 +31,6 @@
   }
 
   function irrMonthly(cashflows, guess = 0.01) {
-    // Newton-Raphson, como Python
     const cf = cashflows.map(Number);
     if (cf.length < 2) return null;
 
@@ -48,13 +46,11 @@
       let f = 0;
       let fp = 0;
       for (let t = 0; t < cf.length; t++) {
-        const denom = Math.pow(1 + r, t);
-        f += cf[t] / denom;
-        if (t > 0) {
-          fp += (-t * cf[t]) / Math.pow(1 + r, t + 1);
-        }
+        f += cf[t] / Math.pow(1 + r, t);
+        fp += (-t * cf[t]) / Math.pow(1 + r, t + 1); // t=0 aporta 0, pero queda 1:1 con Python
       }
       if (Math.abs(fp) < 1e-12) break;
+
       const rNew = r - f / fp;
       if (!isFiniteNum(rNew) || rNew <= -0.9999) break;
       if (Math.abs(rNew - r) < 1e-10) return rNew;
@@ -79,12 +75,17 @@
 
   // ---------- WACC ----------
   function computeWacc(w) {
-    // Ke = Rf + beta*MRP
-    const ke = w.rf + w.beta * w.mrp;
-    // Kd = Rf + spread
-    const kd = w.rf + w.spread;
-    // WACC anual
-    const waccA = w.e_pct * ke + w.d_pct * kd * (1 - w.tax_rate);
+    const e = safeFloat(w.e_pct, 0);
+    const d = safeFloat(w.d_pct, 0);
+    const rf = safeFloat(w.rf, 0);
+    const mrp = safeFloat(w.mrp, 0);
+    const beta = safeFloat(w.beta, 0);
+    const spread = safeFloat(w.spread, 0);
+    const taxRate = safeFloat(w.tax_rate, 0);
+
+    const ke = rf + beta * mrp;
+    const kd = rf + spread;
+    const waccA = e * ke + d * kd * (1 - taxRate);
     const waccM = annualToMonthly(waccA);
     return { ke, waccA, waccM };
   }
@@ -99,7 +100,7 @@
     const service = new Array(nH).fill(0);
     const balEnd = new Array(nH).fill(0);
 
-    if (!(D0 > 0) || termMonths <= 0) {
+    if (!(D0 > 0) || termMonths <= 0 || nH <= 0) {
       return { balance_start: balStart, interest, principal, debt_service: service, balance_end: balEnd };
     }
 
@@ -152,24 +153,67 @@
     return { balance_start: balStart, interest, principal, debt_service: service, balance_end: balEnd };
   }
 
-  // ---------- Core calc (port de build_cashflow_table) ----------
+  // ---------- Core calc ----------
   function buildCashflowTable(S) {
-    const project = S.project;
-    const rev = S.rev;
-    const cost = S.cost;
-    const wc = S.wc;
-    const wacc = S.wacc;
-    const capex = S.capex || [];
-    const fin = S.fin;
+    if (!S || !S.project || !S.rev || !S.cost || !S.wc || !S.wacc) {
+      throw new Error("Estado inválido: faltan secciones (project/rev/cost/wc/wacc).");
+    }
 
-    const n = Math.trunc(project.horizon_months);
+    // Normalización total (evita NaNs por inputs de UI)
+    const project = {
+      horizon_months: safeInt(S.project.horizon_months, 60),
+      tax_rate: safeFloat(S.project.tax_rate, 0.3),
+    };
+
+    const rev = {
+      volume_0: safeFloat(S.rev.volume_0, 0),
+      volume_growth_m: safeFloat(S.rev.volume_growth_m, 0),
+      capacity_max: safeFloat(S.rev.capacity_max, 0),
+      collection_factor: safeFloat(S.rev.collection_factor, 1),
+      price_0: safeFloat(S.rev.price_0, 0),
+      price_growth_m: safeFloat(S.rev.price_growth_m, 0),
+    };
+
+    const cost = {
+      fixed_0: safeFloat(S.cost.fixed_0, 0),
+      fixed_growth_m: safeFloat(S.cost.fixed_growth_m, 0),
+      var_unit_0: safeFloat(S.cost.var_unit_0, 0),
+      var_unit_growth_m: safeFloat(S.cost.var_unit_growth_m, 0),
+      maintenance_0: safeFloat(S.cost.maintenance_0, 0),
+      maintenance_growth_m: safeFloat(S.cost.maintenance_growth_m, 0),
+    };
+
+    const wc = {
+      enabled: !!S.wc.enabled,
+      dso: safeFloat(S.wc.dso, 0),
+      dpo: safeFloat(S.wc.dpo, 0),
+      dio: safeFloat(S.wc.dio, 0),
+      ap_fixed_share: safeFloat(S.wc.ap_fixed_share, 0),
+    };
+
+    const wacc = {
+      e_pct: safeFloat(S.wacc.e_pct, 0.6),
+      d_pct: safeFloat(S.wacc.d_pct, 0.4),
+      rf: safeFloat(S.wacc.rf, 0),
+      mrp: safeFloat(S.wacc.mrp, 0),
+      beta: safeFloat(S.wacc.beta, 1),
+      spread: safeFloat(S.wacc.spread, 0),
+      tax_rate: safeFloat(S.wacc.tax_rate, project.tax_rate),
+    };
+
+    const capex = Array.isArray(S.capex) ? S.capex : [];
+    const fin = S.fin || { enabled: false };
+
+    const n = project.horizon_months;
+    if (n < 1) throw new Error("Horizonte inválido (horizon_months).");
+
     const months = Array.from({ length: n }, (_, i) => i + 1);
 
     // Revenue drivers
     const vol = new Array(n).fill(0);
     const price = new Array(n).fill(0);
-    vol[0] = safeFloat(rev.volume_0, 0);
-    price[0] = safeFloat(rev.price_0, 0);
+    vol[0] = rev.volume_0;
+    price[0] = rev.price_0;
 
     for (let t = 1; t < n; t++) {
       vol[t] = Math.min(rev.capacity_max, vol[t - 1] * (1 + rev.volume_growth_m));
@@ -184,9 +228,9 @@
     const varUnit = new Array(n).fill(0);
     const maint = new Array(n).fill(0);
 
-    fixed[0] = safeFloat(cost.fixed_0, 0);
-    varUnit[0] = safeFloat(cost.var_unit_0, 0);
-    maint[0] = safeFloat(cost.maintenance_0, 0);
+    fixed[0] = cost.fixed_0;
+    varUnit[0] = cost.var_unit_0;
+    maint[0] = cost.maintenance_0;
 
     for (let t = 1; t < n; t++) {
       fixed[t] = fixed[t - 1] * (1 + cost.fixed_growth_m);
@@ -215,7 +259,7 @@
     // CapEx by month
     const capexByMonth = new Array(n).fill(0);
     for (const r of capex) {
-      const mi = Math.trunc(r.month_index);
+      const mi = safeInt(r.month_index, 0);
       if (mi >= 0 && mi < n) capexByMonth[mi] += safeFloat(r.amount, 0);
     }
 
@@ -236,12 +280,12 @@
     const dpb = discountedPaybackMonth(fcff, waccM);
 
     // CFO layer
-    const finEnabled = !!(fin && fin.enabled);
+    const finEnabled = !!fin.enabled;
     const debt = buildDebtSchedule(
       finEnabled ? safeFloat(fin.debt_amount_0, 0) : 0,
       finEnabled ? safeFloat(fin.interest_rate_annual, 0) : 0,
-      finEnabled ? Math.trunc(fin.term_months) : 0,
-      finEnabled ? Math.trunc(fin.grace_months) : 0,
+      finEnabled ? safeInt(fin.term_months, 0) : 0,
+      finEnabled ? safeInt(fin.grace_months, 0) : 0,
       finEnabled ? String(fin.amortization_type || "french") : "french",
       n
     );
@@ -250,24 +294,20 @@
     const principal = debt.principal;
     const service = debt.debt_service;
 
-    // FOD = EBITDA - tax - ΔWC
     const fod = ebitda.map((e, i) => e - tax[i] - dWc[i]);
 
-    // DSCR
     const dscr = new Array(n).fill(NaN);
     for (let i = 0; i < n; i++) {
       if (service[i] > 1e-12) dscr[i] = fod[i] / service[i];
     }
     let dscrMin = null;
-    for (const x of dscr) {
-      if (isFiniteNum(x)) dscrMin = dscrMin === null ? x : Math.min(dscrMin, x);
-    }
+    for (const x of dscr) if (isFiniteNum(x)) dscrMin = dscrMin === null ? x : Math.min(dscrMin, x);
 
-    // FCFE includes t=0
     const fcfe = new Array(n + 1).fill(0);
     const capex0 = capexByMonth[0];
     const dwc0 = dWc[0];
     const D0 = finEnabled ? safeFloat(fin.debt_amount_0, 0) : 0;
+
     fcfe[0] = D0 - (capex0 + dwc0);
 
     for (let t = 1; t <= n; t++) {
@@ -276,7 +316,6 @@
       fcfe[t] = fcff[t] - interest[idx] - principal[idx] + taxShield;
     }
 
-    // buffer equity
     let equityCum = 0;
     let minEquityCum = 0;
     for (const x of fcfe) {
@@ -288,9 +327,8 @@
     const irrEM = irrMonthly(fcfe);
     const irrEA = irrEM === null ? null : Math.pow(1 + irrEM, 12) - 1;
     const pbE = paybackMonth(fcfe);
-    const dpbE = discountedPaybackMonth(fcfe, waccM); // proxy como Python
+    const dpbE = discountedPaybackMonth(fcfe, waccM);
 
-    // "df" como array de objetos (equivalente a DataFrame)
     const df = months.map((m, i) => ({
       Mes: m,
       Volumen: vol[i],
@@ -334,6 +372,39 @@
     };
   }
 
+  // ---------- Golden tests (opcional: ejecutar en consola) ----------
+  function runSelfTests() {
+    const cases = [
+      {
+        name: "Base sin deuda",
+        S: {
+          project: { horizon_months: 60, tax_rate: 0.30 },
+          rev: { volume_0: 200, volume_growth_m: 0.01, capacity_max: 500, collection_factor: 0.98, price_0: 150, price_growth_m: 0.008 },
+          cost: { fixed_0: 12000, fixed_growth_m: 0.007, var_unit_0: 25, var_unit_growth_m: 0.007, maintenance_0: 900, maintenance_growth_m: 0.007 },
+          wc: { enabled: true, dso: 90, dpo: 60, dio: 0, ap_fixed_share: 0.25 },
+          wacc: { e_pct: 0.60, d_pct: 0.40, rf: 0.045, mrp: 0.055, beta: 1.10, spread: 0.03, tax_rate: 0.30 },
+          capex: [{ month_index: 0, item: "Inicial", amount: 730000 }],
+          fin: { enabled: false }
+        }
+      },
+    ];
+
+    const out = [];
+    for (const c of cases) {
+      const r = buildCashflowTable(c.S);
+      out.push({
+        case: c.name,
+        van: r.van,
+        wacc_m: r.wacc_m,
+        tir_m: r.tir_m,
+        payback: r.payback,
+        dscr_min: r.dscr_min,
+        buffer: r.buffer_required,
+      });
+    }
+    return out;
+  }
+
   global.FinanceEngine = {
     annualToMonthly,
     npv,
@@ -343,5 +414,6 @@
     computeWacc,
     buildDebtSchedule,
     buildCashflowTable,
+    runSelfTests,
   };
 })(window);
