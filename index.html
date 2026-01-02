@@ -9,16 +9,6 @@
 <body>
   <h1>Finanzas (offline)</h1>
 
-  <label>Ingresos <input id="ing" type="number"></label><br>
-  <label>Egresos <input id="egr" type="number"></label><br>
-  <button id="btn">Calcular</button>
-
-  <pre id="out"></pre>
-
-  <script src="app.js"></script>
-<body>
-  <h1>Finanzas (offline)</h1>
-
   <label>
     Ingresos:
     <input id="ing" type="number" placeholder="Ingresos">
@@ -32,9 +22,28 @@
   <br><br>
 
   <button id="btn">Calcular</button>
-
   <pre id="out"></pre>
+
+  <hr>
+
+  <h3>Escenarios</h3>
+  <label>
+    Nombre:
+    <input id="scName" type="text" placeholder="Ej: Base enero">
+  </label>
+  <button id="saveSc">Guardar</button>
+  <button id="newSc">Nuevo</button>
+
+  <br><br>
+
+  <label>
+    Cargar:
+    <select id="scList"></select>
+  </label>
+  <button id="loadSc">Cargar</button>
+  <button id="delSc">Eliminar</button>
 
   <script src="app.js"></script>
 </body>
+
 
