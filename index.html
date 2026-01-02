@@ -1,16 +1,279 @@
+<!-- index.html (VIEW COMPLETO) -->
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#ffffff" />
   <title>Finanzas (offline)</title>
 
-  <link rel="manifest" href="./manifest.json" />
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ffffff">
+
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .top { display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .title { font-size:20px; font-weight:800; }
+    .subtitle { font-size:12px; opacity:.8; }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    button { padding:8px 10px; border:1px solid #ccc; background:#fff; border-radius:8px; cursor:pointer; }
+    button:hover { background:#f6f6f6; }
+    input, select, textarea { padding:8px; border:1px solid #ccc; border-radius:8px; }
+    .msg { margin-bottom:12px; }
+    .card { border:1px solid #ddd; border-radius:10px; padding:12px; margin-bottom:12px; }
+    .card h3 { margin:0 0 10px 0; font-size:14px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
+    label { display:grid; gap:6px; font-size:13px; }
+    label span { font-weight:600; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .kpis { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+    .kpi { border:1px solid #ddd; border-radius:10px; padding:12px; }
+    .kpi .k { font-size:12px; opacity:.8; margin-bottom:6px; }
+    .kpi .v { font-size:18px; font-weight:800; }
+    .tablebox { max-height:520px; overflow:auto; border:1px solid #ddd; border-radius:10px; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { position:sticky; top:0; background:#fff; border-bottom:1px solid #ddd; padding:8px; text-align:left; }
+    td { border-bottom:1px solid #f0f0f0; padding:6px 8px; white-space:nowrap; }
+    .hidden { display:none; }
+    .warn { border:1px solid #c08; background:#fff7ff; padding:10px; border-radius:10px; white-space:pre-wrap; }
+    .err  { border:1px solid #d00; background:#fff5f5; padding:10px; border-radius:10px; white-space:pre-wrap; }
+    .note { font-size:12px; opacity:.85; }
+  </style>
 </head>
+
 <body>
-  <!-- app.js crea toda la interfaz -->
+  <div class="wrap" id="appRoot">
+    <div class="top">
+      <div>
+        <div class="title">Modelo de inversión (offline)</div>
+        <div class="subtitle">FCFF mensual nominal (USD) + WACC + (opcional) deuda/FCFE/DSCR/buffer</div>
+      </div>
+      <div class="row">
+        <button id="btnCalc" type="button">Calcular</button>
+        <button id="btnReset" type="button">Reset</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button id="tabInputs" type="button" data-tab="inputs">Inputs</button>
+      <button id="tabResults" type="button" data-tab="results">Resultados</button>
+      <button id="tabCompare" type="button" data-tab="compare">Comparación</button>
+      <button id="tabJSON" type="button" data-tab="json">JSON</button>
+    </div>
+
+    <div id="msgBox" class="msg"></div>
+
+    <!-- INPUTS -->
+    <div id="view_inputs">
+      <!-- Escenarios -->
+      <div class="card">
+        <h3>Escenarios</h3>
+        <div class="row">
+          <span style="font-weight:700;">Nombre:</span>
+          <input id="scName" type="text" placeholder="Ej: Base enero" style="width:220px" />
+          <button id="btnSaveSc" type="button">Guardar</button>
+          <button id="btnNewSc" type="button">Nuevo</button>
+
+          <span style="margin-left:8px;font-weight:700;">Cargar:</span>
+          <select id="scList" style="width:240px"></select>
+          <button id="btnLoadSc" type="button">Cargar</button>
+          <button id="btnDelSc" type="button">Eliminar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>1) Proyecto</h3>
+        <div class="grid">
+          <label><span>Nombre</span><input id="project_name" name="project_name" type="text"></label>
+          <label><span>Inicio (YYYY-MM)</span><input id="start_yyyymm" name="start_yyyymm" type="text"></label>
+          <label><span>Horizonte (meses)</span><input id="horizon_months" name="horizon_months" type="number" step="1"></label>
+          <label><span>Impuesto (tasa 0..0.6)</span><input id="tax_rate" name="tax_rate" type="number" step="0.01"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>2) Ingresos</h3>
+        <div class="grid">
+          <label><span>Volumen inicial (mes)</span><input id="volume_0" name="volume_0" type="number" step="1"></label>
+          <label><span>Crec. volumen mensual</span><input id="volume_growth_m" name="volume_growth_m" type="number" step="0.0001"></label>
+          <label><span>Capacidad máxima (mes)</span><input id="capacity_max" name="capacity_max" type="number" step="1"></label>
+          <label><span>Factor cobranza (0..1)</span><input id="collection_factor" name="collection_factor" type="number" step="0.01"></label>
+          <label><span>Precio inicial (USD)</span><input id="price_0" name="price_0" type="number" step="0.01"></label>
+          <label><span>Ajuste precio mensual</span><input id="price_growth_m" name="price_growth_m" type="number" step="0.0001"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>3) Costos</h3>
+        <div class="grid">
+          <label><span>Fijos iniciales (USD/mes)</span><input id="fixed_0" name="fixed_0" type="number" step="1"></label>
+          <label><span>Ajuste fijos mensual</span><input id="fixed_growth_m" name="fixed_growth_m" type="number" step="0.0001"></label>
+          <label><span>Variable unitario (USD/u)</span><input id="var_unit_0" name="var_unit_0" type="number" step="0.01"></label>
+          <label><span>Ajuste variable mensual</span><input id="var_unit_growth_m" name="var_unit_growth_m" type="number" step="0.0001"></label>
+          <label><span>Mantenimiento (USD/mes)</span><input id="maintenance_0" name="maintenance_0" type="number" step="0.01"></label>
+          <label><span>Ajuste mantenimiento mensual</span><input id="maintenance_growth_m" name="maintenance_growth_m" type="number" step="0.0001"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>4) Capital de trabajo (DSO/DPO/DIO)</h3>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input id="wc_enabled" name="wc_enabled" type="checkbox">
+            <span>Habilitar WC</span>
+          </label>
+        </div>
+        <div class="grid">
+          <label><span>DSO</span><input id="dso" name="dso" type="number" step="1"></label>
+          <label><span>DPO</span><input id="dpo" name="dpo" type="number" step="1"></label>
+          <label><span>DIO</span><input id="dio" name="dio" type="number" step="1"></label>
+          <label><span>% fijos elegibles en AP (0..1)</span><input id="ap_fixed_share" name="ap_fixed_share" type="number" step="0.01"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>5) WACC (manual)</h3>
+        <div class="grid">
+          <label><span>E% (0..1)</span><input id="e_pct" name="e_pct" type="number" step="0.01"></label>
+          <label><span>D% (0..1)</span><input id="d_pct" name="d_pct" type="number" step="0.01"></label>
+          <label><span>Rf anual</span><input id="rf" name="rf" type="number" step="0.0001"></label>
+          <label><span>MRP anual</span><input id="mrp" name="mrp" type="number" step="0.0001"></label>
+          <label><span>Beta</span><input id="beta" name="beta" type="number" step="0.01"></label>
+          <label><span>Spread deuda</span><input id="spread" name="spread" type="number" step="0.0001"></label>
+          <label><span>Tasa impuesto (WACC)</span><input id="wacc_tax_rate" name="wacc_tax_rate" type="number" step="0.01"></label>
+        </div>
+        <div id="waccCaption" class="note" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="card">
+        <h3>6) CapEx</h3>
+        <div class="grid">
+          <label><span>CapEx mes 0 (USD)</span><input id="capex0_amount" name="capex0_amount" type="number" step="1"></label>
+        </div>
+        <div class="note" style="margin-top:6px;">Nota: por ahora editás CapEx del mes 0.</div>
+      </div>
+
+      <div class="card">
+        <h3>7) Financiamiento (opcional)</h3>
+        <div class="row" style="margin-bottom:8px;">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input id="fin_enabled" name="fin_enabled" type="checkbox">
+            <span>Usar deuda</span>
+          </label>
+        </div>
+        <div class="grid">
+          <label><span>Deuda inicial D0 (USD)</span><input id="debt_amount_0" name="debt_amount_0" type="number" step="1"></label>
+          <label><span>Tasa anual deuda</span><input id="interest_rate_annual" name="interest_rate_annual" type="number" step="0.0001"></label>
+          <label><span>Plazo deuda (meses)</span><input id="term_months" name="term_months" type="number" step="1"></label>
+          <label><span>Gracia (meses, solo interés)</span><input id="grace_months" name="grace_months" type="number" step="1"></label>
+          <label>
+            <span>Sistema</span>
+            <select id="amortization_type" name="amortization_type">
+              <option value="french">french</option>
+              <option value="german">german</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input id="tax_shield_enabled" name="tax_shield_enabled" type="checkbox">
+            <span>Escudo fiscal (interés)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="view_results" class="hidden">
+      <div class="kpis">
+        <div class="kpi"><div class="k">VAN (USD)</div><div class="v" id="r_van">–</div></div>
+        <div class="kpi"><div class="k">TIR mensual</div><div class="v" id="r_tir_m">–</div></div>
+        <div class="kpi"><div class="k">TIR anual eq.</div><div class="v" id="r_tir_a">–</div></div>
+        <div class="kpi"><div class="k">WACC anual</div><div class="v" id="r_wacc_a">–</div></div>
+        <div class="kpi"><div class="k">WACC mensual</div><div class="v" id="r_wacc_m">–</div></div>
+        <div class="kpi"><div class="k">Payback (mes)</div><div class="v" id="r_pb">–</div></div>
+        <div class="kpi"><div class="k">Payback desc. (mes)</div><div class="v" id="r_dpb">–</div></div>
+      </div>
+
+      <div class="kpis" style="margin-top:10px;grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+        <div class="kpi"><div class="k">TIR Equity anual eq.</div><div class="v" id="r_irr_e_a">–</div></div>
+        <div class="kpi"><div class="k">DSCR mínimo</div><div class="v" id="r_dscr_min">–</div></div>
+        <div class="kpi"><div class="k">Buffer requerido (USD)</div><div class="v" id="r_buffer">–</div></div>
+        <div class="kpi"><div class="k">FCFE acumulado final</div><div class="v" id="r_fcfe_sum">–</div></div>
+      </div>
+
+      <div id="alertsBox" style="margin-top:12px;"></div>
+
+      <div style="margin-top:12px;">
+        <div style="font-weight:700;margin-bottom:8px;">Tabla mensual</div>
+        <div id="table" class="tablebox"></div>
+      </div>
+    </div>
+
+    <!-- COMPARE -->
+    <div id="view_compare" class="hidden">
+      <div class="card">
+        <h3>Comparación de escenarios (A vs B)</h3>
+        <div class="row">
+          <span style="font-weight:700;">A:</span>
+          <select id="cmpA" name="cmpA" style="width:240px"></select>
+          <span style="font-weight:700;">B:</span>
+          <select id="cmpB" name="cmpB" style="width:240px"></select>
+          <button id="btnCompare" type="button">Comparar</button>
+        </div>
+
+        <div id="cmpKPIs" style="margin-top:12px;"></div>
+        <div id="cmpTable" style="margin-top:12px;max-height:420px;overflow:auto;border:1px solid #ddd;border-radius:10px;"></div>
+        <div class="note" style="margin-top:8px;">
+          Tip: guardá al menos 2 escenarios para que aparezcan en los selects.
+        </div>
+      </div>
+    </div>
+
+    <!-- JSON -->
+    <div id="view_json" class="hidden">
+      <div class="card">
+        <h3>JSON del proyecto</h3>
+        <div class="row" style="margin-bottom:8px;">
+          <button id="btnExportJSON" type="button">Generar JSON desde Inputs</button>
+          <button id="btnImportJSON" type="button">Cargar JSON (pegar)</button>
+          <button id="btnDownloadJSON" type="button">Descargar JSON</button>
+          <span style="margin-left:10px;font-weight:700;">Archivo:</span>
+          <input id="jsonFile" name="jsonFile" type="file" accept=".json" />
+          <button id="btnLoadFileJSON" type="button">Cargar archivo JSON</button>
+        </div>
+
+        <textarea id="jsonArea" name="jsonArea" style="width:100%;height:260px;font-family:ui-monospace,Consolas,monospace;font-size:12px;"></textarea>
+        <div class="note" style="margin-top:8px;">Tip: este JSON es compatible con tu export/import (shape equivalente a Streamlit).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORTANTE: orden -->
   <script src="./engine.js"></script>
   <script src="./app.js"></script>
+
+  <script>
+    // Tabs mínimos (por si tu app.js no los toma aún)
+    (function () {
+      const views = {
+        inputs: document.getElementById("view_inputs"),
+        results: document.getElementById("view_results"),
+        compare: document.getElementById("view_compare"),
+        json: document.getElementById("view_json"),
+      };
+      function show(k) {
+        Object.values(views).forEach(v => v.classList.add("hidden"));
+        views[k].classList.remove("hidden");
+      }
+      document.getElementById("tabInputs").addEventListener("click", () => show("inputs"));
+      document.getElementById("tabResults").addEventListener("click", () => show("results"));
+      document.getElementById("tabCompare").addEventListener("click", () => show("compare"));
+      document.getElementById("tabJSON").addEventListener("click", () => show("json"));
+      show("inputs");
+    })();
+  </script>
 </body>
 </html>
