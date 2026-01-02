@@ -166,7 +166,7 @@ function ensureUI() {
   function activate(tab) {
     viewInputs.style.display = tab === "inputs" ? "" : "none";
     viewResults.style.display = tab === "results" ? "" : "none";
-    viewCompare.style.display = tab === "compare" ? "" : "none";
+    viewCompare.style.display = tab === "compare" ? "" : "none";el("button", { id:"tabCompare", type:"button", "data-tab":"compare" }, ["Comparar"])
     viewJSON.style.display = tab === "json" ? "" : "none";
   }
 
