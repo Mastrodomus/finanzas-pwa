@@ -429,6 +429,30 @@
     </div>
   </div>
 
+  /* Mensajes del sistema (errores / advertencias) */
+#msgBox,
+#msgBox * {
+  color: #0b1220 !important; /* texto oscuro legible */
+}
+
+#msgBox .warn {
+  background: #fff7ed !important;
+  border: 1px solid #f59e0b !important;
+}
+
+#msgBox .err {
+  background: #fef2f2 !important;
+  border: 1px solid #ef4444 !important;
+}
+
+/* Por si app.js mete texto directo sin clase */
+#msgBox:not(:empty) {
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+
   <!-- IMPORTANTE: orden -->
   <script src="./engine.js"></script>
   <script src="./app.js"></script>
