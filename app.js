@@ -292,14 +292,20 @@ function buildInputsView(host) {
     el("div", { id: "waccCaption", style: { marginTop: "8px", fontSize: "12px", opacity: "0.85" } }, [""])
   ]);
 
-  // CapEx (v1: solo mes 0, como mínimo)
-  const secCapex = section("6) CapEx", [
-    grid([
-      field("CapEx mes 0 (USD)", "capex0_amount", "number", "1"),
+  // CapEx (tabla multi-mes, como Python)
+  const capexTable = el("div", { id: "capexTable" });
+
+  const capexBtnRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" } }, [
+    el("button", { id: "btnCapexAdd", type: "button" }, ["+ Fila"]),
+    el("button", { id: "btnCapexClear", type: "button" }, ["Reset CapEx"]),
+  ]);
+
+  const secCapex = section("6) CapEx (multi-mes)", [
+    el("div", { style: { fontSize: "12px", opacity: "0.85", marginBottom: "8px" } }, [
+      "month_index: 0 = mes inicial. Podés cargar múltiples inversiones o reintegros (monto negativo)."
     ]),
-    el("div", { style: { fontSize: "12px", opacity: "0.85", marginTop: "6px" } }, [
-      "Nota: por ahora editás CapEx del mes 0. Luego se agrega tabla multi-mes (igual que Python)."
-    ])
+    capexTable,
+    capexBtnRow,
   ]);
 
   // Deuda
