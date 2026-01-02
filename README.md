@@ -1,0 +1,2 @@
+# finanzas-pwa
+offline service
