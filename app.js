@@ -317,15 +317,11 @@ function buildInputsView(host) {
   host.appendChild(secFin);
 }
 
-  // ---- Comparación de escenarios ----
-  const compareHost = el("div", {
-    id: "view_compare",
-    style: { marginTop: "24px" }
-  });
+// ---- Comparación de escenarios ----
+const compBox = section("Comparación de escenarios", [
+  ...
+]);
 
-  host.appendChild(compareHost);
-
-  buildCompareView(compareHost);
 
 
 function buildResultsView(host) {
