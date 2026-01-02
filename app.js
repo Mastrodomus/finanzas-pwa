@@ -1435,6 +1435,167 @@ function compareScenarios() {
    - fillCompareSelectors(keepA, keepB)
 ========================================================= */
 
+function cumulate(arr) {
+  let s = 0;
+  return arr.map(v => (s += v));
+}
+
+function drawLineChart({ host, series, width = 520, height = 260 }) {
+  host.innerHTML = "";
+
+  if (!series || series.length === 0) {
+    host.textContent = "Sin datos.";
+    return;
+  }
+
+  const padding = 40;
+  const allValues = series.flatMap(s => s.data);
+  const minY = Math.min(...allValues);
+  const maxY = Math.max(...allValues);
+
+  const maxLen = Math.max(...series.map(s => s.data.length));
+  if (maxLen < 2) {
+    host.textContent = "Serie demasiado corta.";
+    return;
+  }
+
+  const xScale = i => padding + (i / (maxLen - 1)) * (width - 2 * padding);
+  const yScale = v => height - padding - ((v - minY) / (maxY - minY || 1)) * (height - 2 * padding);
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.style.border = "1px solid #ddd";
+  svg.style.borderRadius = "10px";
+  svg.style.background = "#fff";
+
+  // Ejes
+  const xAxis = document.createElementNS(svgNS, "line");
+  xAxis.setAttribute("x1", padding);
+  xAxis.setAttribute("x2", width - padding);
+  xAxis.setAttribute("y1", height - padding);
+  xAxis.setAttribute("y2", height - padding);
+  xAxis.setAttribute("stroke", "#aaa");
+  svg.appendChild(xAxis);
+
+  const yAxis = document.createElementNS(svgNS, "line");
+  yAxis.setAttribute("x1", padding);
+  yAxis.setAttribute("x2", padding);
+  yAxis.setAttribute("y1", padding);
+  yAxis.setAttribute("y2", height - padding);
+  yAxis.setAttribute("stroke", "#aaa");
+  svg.appendChild(yAxis);
+
+  // Min/Max labels
+  const tMin = document.createElementNS(svgNS, "text");
+  tMin.setAttribute("x", "6");
+  tMin.setAttribute("y", String(height - padding));
+  tMin.setAttribute("font-size", "10");
+  tMin.setAttribute("fill", "#555");
+  tMin.textContent = minY.toFixed(0);
+  svg.appendChild(tMin);
+
+  const tMax = document.createElementNS(svgNS, "text");
+  tMax.setAttribute("x", "6");
+  tMax.setAttribute("y", String(padding + 4));
+  tMax.setAttribute("font-size", "10");
+  tMax.setAttribute("fill", "#555");
+  tMax.textContent = maxY.toFixed(0);
+  svg.appendChild(tMax);
+
+  // Series
+  series.forEach((s) => {
+    const path = document.createElementNS(svgNS, "path");
+    const d = s.data
+      .map((v, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(v)}`)
+      .join(" ");
+
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", s.color || "#000");
+    path.setAttribute("stroke-width", s.base ? "3" : "1.6");
+    path.setAttribute("opacity", s.base ? "1" : "0.85");
+
+    svg.appendChild(path);
+  });
+
+  host.appendChild(svg);
+
+  // Leyenda simple
+  const legend = document.createElement("div");
+  legend.style.display = "flex";
+  legend.style.flexWrap = "wrap";
+  legend.style.gap = "10px";
+  legend.style.marginTop = "8px";
+  legend.style.fontSize = "12px";
+
+  series.forEach(s => {
+    const item = document.createElement("div");
+    item.style.display = "flex";
+    item.style.alignItems = "center";
+    item.style.gap = "6px";
+
+    const dot = document.createElement("span");
+    dot.style.display = "inline-block";
+    dot.style.width = "10px";
+    dot.style.height = "10px";
+    dot.style.borderRadius = "50%";
+    dot.style.background = s.color || "#000";
+    dot.style.outline = s.base ? "2px solid #000" : "none";
+
+    const name = document.createElement("span");
+    name.textContent = s.name + (s.base ? " (base)" : "");
+
+    item.appendChild(dot);
+    item.appendChild(name);
+    legend.appendChild(item);
+  });
+
+  host.appendChild(legend);
+}
+
+function drawScenarioCurves() {
+  const hostFCFF = byId("chartFCFF");
+  const hostFCFE = byId("chartFCFE");
+  if (!hostFCFF || !hostFCFE) return;
+
+  const names = getIndex();
+  if (!names || names.length === 0) {
+    hostFCFF.textContent = "No hay escenarios guardados.";
+    hostFCFE.textContent = "No hay escenarios guardados.";
+    return;
+  }
+
+  // Base = selector A si existe, sino el primero
+  const baseName = (byId("cmpA") && byId("cmpA").value) ? byId("cmpA").value : names[0];
+
+  const seriesFCFF = [];
+  const seriesFCFE = [];
+
+  // Colores determinísticos por índice
+  const sorted = names.slice().sort((a, b) => a.localeCompare(b));
+
+  for (let idx = 0; idx < sorted.length; idx++) {
+    const name = sorted[idx];
+    const S = getScenarioStateByName(name);
+    if (!S) continue;
+
+    const res = FinanceEngine.buildCashflowTable(S);
+
+    const fcffCum = cumulate(res.fcff.slice(1));
+    const fcfeCum = cumulate(res.fcfe.slice(1));
+
+    const color = `hsl(${(idx * 67) % 360},70%,42%)`;
+
+    seriesFCFF.push({ name, data: fcffCum, color, base: name === baseName });
+    seriesFCFE.push({ name, data: fcfeCum, color, base: name === baseName });
+  }
+
+  drawLineChart({ host: hostFCFF, series: seriesFCFF });
+  drawLineChart({ host: hostFCFE, series: seriesFCFE });
+}
+
 
 /* --------------------------
    13) Wire up (COMPLETO y robusto)
