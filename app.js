@@ -351,6 +351,20 @@ function buildResultsView(host) {
   host.appendChild(alerts);
   host.appendChild(tableHost);
 }
+  // ---- Comparación de escenarios ----
+  const compBox = section("Comparación de escenarios", [
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
+      el("span", { style: { fontWeight: "700" } }, ["Escenario A:"]),
+      el("select", { id: "cmpA", style: { width: "240px" } }),
+      el("span", { style: { fontWeight: "700", marginLeft: "10px" } }, ["Escenario B:"]),
+      el("select", { id: "cmpB", style: { width: "240px" } }),
+      el("button", { id: "btnCompare", type: "button" }, ["Comparar"]),
+    ]),
+    el("div", { id: "cmpKPIs", style: { marginTop: "12px" } }),
+    el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
+  ]);
+
+  host.appendChild(compBox);
 
 function buildCompareView(host) {
   // selector base + multiselección
@@ -1051,38 +1065,182 @@ function pickNoneCompare() {
   for (const opt of multi.options) opt.selected = false;
 }
 
+/* ==========================
+   ESCENARIOS (guardar / cargar / eliminar)
+========================== */
+
+const SC_INDEX_KEY = "finanzas.scenarios.index.v1";
+const SC_DATA_PREFIX = "finanzas.scenario.v1.";
+
+function getScenarioIndex() {
+  try {
+    return JSON.parse(localStorage.getItem(SC_INDEX_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function setScenarioIndex(arr) {
+  localStorage.setItem(SC_INDEX_KEY, JSON.stringify(arr));
+}
+
+function saveScenario() {
+  const nameInput = document.getElementById("scName");
+  if (!nameInput) {
+    alert("No existe el input de nombre de escenario (scName)");
+    return;
+  }
+
+  const name = nameInput.value.trim();
+  if (!name) {
+    alert("Poné un nombre de escenario");
+    nameInput.focus();
+    return;
+  }
+
+  const S = readStateFromUI();
+  const payload = {
+    S,
+    meta: { savedAt: new Date().toISOString() }
+  };
+
+  localStorage.setItem(SC_DATA_PREFIX + name, JSON.stringify(payload));
+
+  const idx = new Set(getScenarioIndex());
+  idx.add(name);
+  setScenarioIndex([...idx]);
+
+  refreshScenarioList(name);
+  fillCompareSelectors();
+
+  doCalc();
+}
+
+function loadScenario() {
+  const sel = document.getElementById("scList");
+  if (!sel || !sel.value) return;
+
+  const raw = localStorage.getItem(SC_DATA_PREFIX + sel.value);
+  if (!raw) {
+    alert("Escenario no encontrado");
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    alert("Escenario corrupto");
+    return;
+  }
+
+  if (!payload.S) {
+    alert("Escenario inválido (sin estado)");
+    return;
+  }
+
+  writeStateToUI(payload.S);
+  document.getElementById("scName").value = sel.value;
+
+  renderWaccCaption(payload.S);
+  doCalc();
+}
+
+function deleteScenario() {
+  const sel = document.getElementById("scList");
+  if (!sel || !sel.value) return;
+
+  const name = sel.value;
+  if (!confirm(`Eliminar escenario "${name}"?`)) return;
+
+  localStorage.removeItem(SC_DATA_PREFIX + name);
+  setScenarioIndex(getScenarioIndex().filter(n => n !== name));
+
+  refreshScenarioList("");
+  fillCompareSelectors();
+}
+
+function newScenario() {
+  writeStateToUI(deepClone(DEFAULT_STATE));
+  document.getElementById("scName").value = "";
+  renderWaccCaption(readStateFromUI());
+  renderMessages([], []);
+}
+
+function refreshScenarioList(selected = "") {
+  const sel = document.getElementById("scList");
+  if (!sel) return;
+
+  const names = getScenarioIndex().sort();
+  sel.innerHTML = "";
+
+  if (!names.length) {
+    sel.appendChild(new Option("(sin escenarios)", ""));
+    return;
+  }
+
+  for (const n of names) {
+    const opt = new Option(n, n);
+    if (n === selected) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+
 /* --------------------------
-   13) Wire up
+   13) Wire up (COMPLETO y robusto)
 ---------------------------*/
+function onClick(id, fn) {
+  const el = byId(id);
+  if (!el) return false;
+  el.addEventListener("click", fn);
+  return true;
+}
+
 function wire() {
   ensureUI();
 
+  // Defaults
   writeStateToUI(deepClone(DEFAULT_STATE));
   renderWaccCaption(readStateFromUI());
 
+  // Escenarios
   refreshScenarioList("");
-  refreshCompareUI();
 
-  byId("btnCalc").addEventListener("click", doCalc);
-  byId("btnReset").addEventListener("click", () => { newScenario(); });
+  // Compare (si existe UI de compare, la engancha; si no existe, no rompe)
+  if (typeof fillCompareSelectors === "function") fillCompareSelectors();
+  if (typeof refreshCompareUI === "function") refreshCompareUI();
 
-  byId("btnSaveSc").addEventListener("click", saveScenario);
-  byId("btnLoadSc").addEventListener("click", loadScenario);
-  byId("btnDelSc").addEventListener("click", deleteScenario);
-  byId("btnNewSc").addEventListener("click", newScenario);
+  // Botones base
+  onClick("btnCalc", doCalc);
+  onClick("btnReset", newScenario);
 
-  byId("btnExportJSON").addEventListener("click", exportJSONToArea);
-  byId("btnImportJSON").addEventListener("click", importJSONFromArea);
-  byId("btnDownloadJSON").addEventListener("click", downloadJSON);
-  byId("btnLoadFileJSON").addEventListener("click", loadJSONFile);
+  // Escenarios (CRUD)
+  onClick("btnSaveSc", saveScenario);
+  onClick("btnLoadSc", loadScenario);
+  onClick("btnDelSc", deleteScenario);
+  onClick("btnNewSc", newScenario);
 
-  // Compare
-  byId("btnRunCompare").addEventListener("click", runCompare);
-  byId("btnPickAll").addEventListener("click", () => { pickAllCompare(); });
-  byId("btnPickNone").addEventListener("click", () => { pickNoneCompare(); });
+  // JSON
+  onClick("btnExportJSON", exportJSONToArea);
+  onClick("btnImportJSON", importJSONFromArea);
+  onClick("btnDownloadJSON", downloadJSON);
+  onClick("btnLoadFileJSON", loadJSONFile);
 
-  // WACC caption live
-  const waccIds = ["e_pct","d_pct","rf","mrp","beta","spread","wacc_tax_rate"];
+  // Compare (unificado: preferimos runCompare; si quedó un botón viejo btnCompare, lo mapeamos también)
+  if (typeof runCompare === "function") {
+    onClick("btnRunCompare", runCompare);
+    onClick("btnCompare", runCompare); // compatibilidad si existe
+  } else if (typeof compareScenarios === "function") {
+    onClick("btnRunCompare", compareScenarios);
+    onClick("btnCompare", compareScenarios);
+  }
+
+  if (typeof pickAllCompare === "function") onClick("btnPickAll", pickAllCompare);
+  if (typeof pickNoneCompare === "function") onClick("btnPickNone", pickNoneCompare);
+
+  // WACC caption live (si existen inputs)
+  const waccIds = ["e_pct", "d_pct", "rf", "mrp", "beta", "spread", "wacc_tax_rate"];
   for (const id of waccIds) {
     const e = byId(id);
     if (e) e.addEventListener("input", () => renderWaccCaption(readStateFromUI()));
