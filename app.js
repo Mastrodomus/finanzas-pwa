@@ -352,18 +352,6 @@ function buildResultsView(host) {
   host.appendChild(alerts);
   host.appendChild(tableHost);
 }
-  // ---- Comparación de escenarios ----
-  const compBox = section("Comparación de escenarios", [
-    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-      el("span", { style: { fontWeight: "700" } }, ["Escenario A:"]),
-      el("select", { id: "cmpA", style: { width: "240px" } }),
-      el("span", { style: { fontWeight: "700", marginLeft: "10px" } }, ["Escenario B:"]),
-      el("select", { id: "cmpB", style: { width: "240px" } }),
-      el("button", { id: "btnCompare", type: "button" }, ["Comparar"]),
-    ]),
-    el("div", { id: "cmpKPIs", style: { marginTop: "12px" } }),
-    el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
-  ]);
 
 function buildCompareView(host) {
   if (!host) return;
