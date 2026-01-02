@@ -1,18 +1,20 @@
-/* app.js (v4) — incluye Comparación de escenarios
-   - Inputs / Resultados / Comparación / JSON
-   - Guarda/carga/elimina escenarios (localStorage)
-   - Compara múltiples escenarios (KPIs + deltas vs base)
-   - 100% offline, sin backend
-
-   Requisito en index.html:
+/* app.js (LIMPIO + COMPLETO + COMPARACIÓN A/B)
+   Requisitos en index.html (orden):
      <script src="engine.js"></script>
      <script src="app.js"></script>
+
+   Este archivo:
+   - UI completa (Inputs / Resultados / Comparación / JSON)
+   - Escenarios (guardar/cargar/eliminar)
+   - Import/Export JSON (pegar + descargar + cargar archivo)
+   - Cálculo con engine.js: window.FinanceEngine.buildCashflowTable(S)
+   - Comparación A vs B: KPIs + diferencias + curvas (FCFF/FCFE acumulado)
 */
 
 "use strict";
 
 /* --------------------------
-   0) PWA SW register
+   0) SW (opcional)
 ---------------------------*/
 (function registerSW() {
   try {
@@ -72,9 +74,7 @@ function getIndex() {
 function setIndex(arr) {
   localStorage.setItem(INDEX_KEY, JSON.stringify(arr));
 }
-function safeName(s) {
-  return String(s || "").trim();
-}
+function safeName(s) { return String(s || "").trim(); }
 
 /* --------------------------
    3) Helpers
@@ -89,10 +89,6 @@ function fmtMoney(x) {
 function fmtPct(x) {
   if (!isFiniteNum(x)) return "N/D";
   return (x * 100).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
-}
-function fmtMaybeNumber(x, digits = 2) {
-  if (!isFiniteNum(x)) return "N/D";
-  return x.toFixed(digits);
 }
 
 function el(tag, attrs = {}, children = []) {
@@ -109,8 +105,38 @@ function el(tag, attrs = {}, children = []) {
 }
 function byId(id) { return document.getElementById(id); }
 
+function section(title, children = []) {
+  return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" } }, [
+    el("div", { style: { fontWeight: "700", marginBottom: "8px" } }, [title]),
+    ...children
+  ]);
+}
+function grid(children = []) {
+  return el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" } }, children);
+}
+function field(label, id, type = "number", step = "any", placeholder = "") {
+  return el("label", { style: { display: "grid", gap: "6px", fontSize: "13px" } }, [
+    el("span", { style: { fontWeight: "600" } }, [label]),
+    el("input", { id, type, step, placeholder })
+  ]);
+}
+function checkbox(label, id) {
+  return el("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" } }, [
+    el("input", { id, type: "checkbox" }),
+    el("span", { style: { fontWeight: "600" } }, [label])
+  ]);
+}
+function selectField(label, id, options) {
+  const sel = el("select", { id });
+  for (const { value, text } of options) sel.appendChild(el("option", { value }, [text]));
+  return el("label", { style: { display: "grid", gap: "6px", fontSize: "13px" } }, [
+    el("span", { style: { fontWeight: "600" } }, [label]),
+    sel
+  ]);
+}
+
 /* --------------------------
-   4) UI base
+   4) UI base (crea todo)
 ---------------------------*/
 function ensureUI() {
   let root = byId("appRoot");
@@ -125,8 +151,8 @@ function ensureUI() {
     style: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }
   }, [
     el("div", {}, [
-      el("div", { style: { fontSize: "20px", fontWeight: "700" } }, ["Modelo de inversión (offline)"]),
-      el("div", { style: { fontSize: "12px", opacity: "0.8" } }, ["FCFF + WACC + (opcional) deuda/FCFE/DSCR/buffer"])
+      el("div", { style: { fontSize: "20px", fontWeight: "800" } }, ["Modelo de inversión (offline)"]),
+      el("div", { style: { fontSize: "12px", opacity: "0.8" } }, ["FCFF + WACC + (opcional) deuda/FCFE/DSCR/buffer + comparación"])
     ]),
     el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } }, [
       el("button", { id: "btnCalc", type: "button" }, ["Calcular"]),
@@ -134,21 +160,19 @@ function ensureUI() {
     ])
   ]);
 
-  const tabs = el("div", {
-    style: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }
-  }, [
-    el("button", { id: "tabInputs", type: "button", "data-tab": "inputs" }, ["Inputs"]),
-    el("button", { id: "tabResults", type: "button", "data-tab": "results" }, ["Resultados"]),
-    el("button", { id: "tabCompare", type: "button", "data-tab": "compare" }, ["Comparación"]),
-    el("button", { id: "tabJSON", type: "button", "data-tab": "json" }, ["JSON"]),
+  const tabs = el("div", { style: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" } }, [
+    el("button", { id: "tabInputs", type: "button" }, ["Inputs"]),
+    el("button", { id: "tabResults", type: "button" }, ["Resultados"]),
+    el("button", { id: "tabCompare", type: "button" }, ["Comparación"]),
+    el("button", { id: "tabJSON", type: "button" }, ["JSON"]),
   ]);
 
   const msg = el("div", { id: "msgBox", style: { marginBottom: "12px" } });
 
-  const viewInputs  = el("div", { id: "view_inputs" });
+  const viewInputs = el("div", { id: "view_inputs" });
   const viewResults = el("div", { id: "view_results", style: { display: "none" } });
   const viewCompare = el("div", { id: "view_compare", style: { display: "none" } });
-  const viewJSON    = el("div", { id: "view_json", style: { display: "none" } });
+  const viewJSON = el("div", { id: "view_json", style: { display: "none" } });
 
   root.appendChild(topBar);
   root.appendChild(tabs);
@@ -166,49 +190,51 @@ function ensureUI() {
   buildJSONView(viewJSON);
 
   function activate(tab) {
-    viewInputs.style.display  = tab === "inputs"  ? "" : "none";
+    viewInputs.style.display = tab === "inputs" ? "" : "none";
     viewResults.style.display = tab === "results" ? "" : "none";
     viewCompare.style.display = tab === "compare" ? "" : "none";
-    viewJSON.style.display    = tab === "json"    ? "" : "none";
+    viewJSON.style.display = tab === "json" ? "" : "none";
   }
 
   byId("tabInputs").addEventListener("click", () => activate("inputs"));
   byId("tabResults").addEventListener("click", () => activate("results"));
-  byId("tabCompare").addEventListener("click", () => {
-    activate("compare");
-    if (typeof refreshCompareUI === "function") refreshCompareUI();
-  });
+  byId("tabCompare").addEventListener("click", () => { activate("compare"); refreshCompareUI(); });
   byId("tabJSON").addEventListener("click", () => activate("json"));
 
   activate("inputs");
   return root;
 }
 
-
 /* --------------------------
    5) Views
 ---------------------------*/
 function buildInputsView(host) {
-  const scName = el("input", { id: "scName", type: "text", placeholder: "Ej: Base", style: { width: "220px" } });
-  const scList = el("select", { id: "scList", style: { width: "240px" } });
+  host.innerHTML = "";
 
-  const scRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-    el("span", { style: { fontWeight: "700" } }, ["Escenarios"]),
-    scName,
-    el("button", { id: "btnSaveSc", type: "button" }, ["Guardar"]),
-    el("button", { id: "btnNewSc", type: "button" }, ["Nuevo"]),
-    el("span", { style: { marginLeft: "8px" } }, ["Cargar:"]),
-    scList,
-    el("button", { id: "btnLoadSc", type: "button" }, ["Cargar"]),
-    el("button", { id: "btnDelSc", type: "button" }, ["Eliminar"]),
+  // Escenarios (arriba)
+  const scName = el("input", { id: "scName", type: "text", placeholder: "Ej: Base enero", style: { width: "220px" } });
+  const scList = el("select", { id: "scList", style: { width: "260px" } });
+
+  const scRow = section("Escenarios", [
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
+      el("span", { style: { fontWeight: "700" } }, ["Nombre:"]),
+      scName,
+      el("button", { id: "btnSaveSc", type: "button" }, ["Guardar"]),
+      el("button", { id: "btnNewSc", type: "button" }, ["Nuevo"]),
+      el("span", { style: { marginLeft: "8px" } }, ["Cargar:"]),
+      scList,
+      el("button", { id: "btnLoadSc", type: "button" }, ["Cargar"]),
+      el("button", { id: "btnDelSc", type: "button" }, ["Eliminar"]),
+    ])
   ]);
 
+  // Secciones Inputs
   const secProject = section("1) Proyecto", [
     grid([
-      field("Nombre", "project_name", "text"),
-      field("Inicio (YYYY-MM)", "start_yyyymm", "text"),
+      field("Nombre", "project_name", "text", "any", "Nombre del proyecto"),
+      field("Inicio (YYYY-MM)", "start_yyyymm", "text", "any", "2026-01"),
       field("Horizonte (meses)", "horizon_months", "number", "1"),
-      field("Impuesto (tasa 0..0.6)", "tax_rate", "number", "0.01"),
+      field("Impuesto (0..0.6)", "tax_rate", "number", "0.01"),
     ])
   ]);
 
@@ -234,8 +260,8 @@ function buildInputsView(host) {
     ])
   ]);
 
-  const secWC = section("4) Capital de trabajo (DSO/DPO/DIO)", [
-    el("div", { style: { marginBottom: "8px" } }, [ checkbox("Habilitar WC", "wc_enabled") ]),
+  const secWC = section("4) Capital de trabajo", [
+    el("div", { style: { marginBottom: "8px" } }, [checkbox("Habilitar WC", "wc_enabled")]),
     grid([
       field("DSO", "dso", "number", "1"),
       field("DPO", "dpo", "number", "1"),
@@ -260,12 +286,12 @@ function buildInputsView(host) {
   const secCapex = section("6) CapEx", [
     grid([ field("CapEx mes 0 (USD)", "capex0_amount", "number", "1") ]),
     el("div", { style: { fontSize: "12px", opacity: "0.85", marginTop: "6px" } }, [
-      "Nota: por ahora editás CapEx del mes 0. Si querés tabla multi-mes (igual que Streamlit), se agrega en el siguiente sprint."
+      "Nota: en esta versión se edita CapEx del mes 0 (mínimo viable)."
     ])
   ]);
 
   const secFin = section("7) Financiamiento (opcional)", [
-    el("div", { style: { marginBottom: "8px" } }, [ checkbox("Usar deuda", "fin_enabled") ]),
+    el("div", { style: { marginBottom: "8px" } }, [checkbox("Usar deuda", "fin_enabled")]),
     grid([
       field("Deuda inicial D0 (USD)", "debt_amount_0", "number", "1"),
       field("Tasa anual deuda", "interest_rate_annual", "number", "0.0001"),
@@ -276,11 +302,10 @@ function buildInputsView(host) {
         { value: "german", text: "german" },
       ]),
     ]),
-    el("div", { style: { marginTop: "8px" } }, [ checkbox("Escudo fiscal (interés)", "tax_shield_enabled") ])
+    el("div", { style: { marginTop: "8px" } }, [checkbox("Escudo fiscal (interés)", "tax_shield_enabled")])
   ]);
 
   host.appendChild(scRow);
-  host.appendChild(el("div", { style: { height: "10px" } }));
   host.appendChild(secProject);
   host.appendChild(secRev);
   host.appendChild(secCost);
@@ -290,8 +315,9 @@ function buildInputsView(host) {
   host.appendChild(secFin);
 }
 
-
 function buildResultsView(host) {
+  host.innerHTML = "";
+
   const kpiGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" } });
   function kpiCard(title, id) {
     return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px" } }, [
@@ -299,6 +325,7 @@ function buildResultsView(host) {
       el("div", { id, style: { fontSize: "18px", fontWeight: "800" } }, ["–"]),
     ]);
   }
+
   kpiGrid.appendChild(kpiCard("VAN (USD)", "r_van"));
   kpiGrid.appendChild(kpiCard("TIR mensual", "r_tir_m"));
   kpiGrid.appendChild(kpiCard("TIR anual eq.", "r_tir_a"));
@@ -327,87 +354,40 @@ function buildResultsView(host) {
 }
 
 function buildCompareView(host) {
-  if (!host) return;
   host.innerHTML = "";
 
-  const compBox = section("Comparación de escenarios", [
+  const box = section("Comparación A vs B (desde escenarios guardados)", [
     el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-      el("span", { style: { fontWeight: "700" } }, ["A:"]),
-      el("select", { id: "cmpA", style: { width: "240px" } }),
-      el("span", { style: { fontWeight: "700" } }, ["B:"]),
-      el("select", { id: "cmpB", style: { width: "240px" } }),
+      el("span", { style: { fontWeight: "800" } }, ["A:"]),
+      el("select", { id: "cmpA", style: { width: "260px" } }),
+      el("span", { style: { fontWeight: "800" } }, ["B:"]),
+      el("select", { id: "cmpB", style: { width: "260px" } }),
       el("button", { id: "btnCompare", type: "button" }, ["Comparar"]),
     ]),
     el("div", { id: "cmpKPIs", style: { marginTop: "12px" } }),
+    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "12px" } }, [
+      section("FCFF acumulado", [
+        el("canvas", { id: "cmpCanvasFCFF", width: "520", height: "220", style: { width: "100%", border: "1px solid #ddd", borderRadius: "10px" } })
+      ]),
+      section("FCFE acumulado (Equity)", [
+        el("canvas", { id: "cmpCanvasFCFE", width: "520", height: "220", style: { width: "100%", border: "1px solid #ddd", borderRadius: "10px" } })
+      ]),
+    ]),
     el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
+    el("div", { style: { fontSize: "12px", opacity: "0.8", marginTop: "8px" } }, [
+      "Nota: A y B se calculan con el mismo engine; acá se comparan los KPIs y se muestran curvas acumuladas."
+    ])
   ]);
 
-  const curvesBox = section("Curvas comparadas", [
-    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-      el("button", { id: "btnDrawCurves", type: "button" }, ["Dibujar curvas"]),
-    ]),
-    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "10px" } }, [
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFF acumulado"]),
-        el("div", { id: "chartFCFF" }),
-      ]),
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFE acumulado (Equity)"]),
-        el("div", { id: "chartFCFE" }),
-      ]),
-    ]),
-  ]);
-
-  host.appendChild(compBox);
-  host.appendChild(curvesBox);
+  host.appendChild(box);
 }
-
-
-  // Curvas comparadas
-  const curvesBox = section("Curvas comparadas", [
-    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-      el("button", { id: "btnDrawCurves", type: "button" }, ["Dibujar curvas"]),
-    ]),
-    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "10px" } }, [
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFF acumulado"]),
-        el("div", { id: "chartFCFF" }),
-      ]),
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFE acumulado (Equity)"]),
-        el("div", { id: "chartFCFE" }),
-      ]),
-    ]),
-  ]);
-
-  host.appendChild(compBox);
-  host.appendChild(curvesBox);
-}
-
-
-  // --- Curvas comparadas (FCFF/FCFE acumulados) ---
-  const curvesBox = section("Curvas comparadas", [
-    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
-      el("button", { id: "btnDrawCurves", type: "button" }, ["Dibujar curvas"]),
-    ]),
-    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "10px" } }, [
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFF acumulado"]),
-        el("div", { id: "chartFCFF" }),
-      ]),
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFE acumulado (Equity)"]),
-        el("div", { id: "chartFCFE" }),
-      ]),
-    ]),
-  ]);
-
-  host.appendChild(curvesBox);
-
 
 function buildJSONView(host) {
+  host.innerHTML = "";
+
   const txt = el("textarea", { id: "jsonArea", style: { width: "100%", height: "260px", fontFamily: "ui-monospace, Consolas, monospace", fontSize: "12px" } });
   const file = el("input", { id: "jsonFile", type: "file", accept: ".json" });
+
   const btnExport = el("button", { id: "btnExportJSON", type: "button" }, ["Generar JSON desde Inputs"]);
   const btnImport = el("button", { id: "btnImportJSON", type: "button" }, ["Cargar JSON (pegar)"]);
   const btnDownload = el("button", { id: "btnDownloadJSON", type: "button" }, ["Descargar JSON"]);
@@ -419,10 +399,7 @@ function buildJSONView(host) {
       el("span", { style: { marginLeft: "10px" } }, ["Archivo:"]),
       file, btnLoadFile
     ]),
-    txt,
-    el("div", { style: { fontSize: "12px", opacity: "0.85", marginTop: "8px" } }, [
-      "Tip: este JSON es compatible con tu export/import de Streamlit (shape equivalente)."
-    ])
+    txt
   ]));
 }
 
@@ -444,8 +421,7 @@ function readStr(id, def = "") {
 function readBool(id, def = false) {
   const e = byId(id);
   if (!e) return def;
-  if (e.type === "checkbox") return !!e.checked;
-  return def;
+  return e.type === "checkbox" ? !!e.checked : def;
 }
 function writeVal(id, v) {
   const e = byId(id);
@@ -551,25 +527,24 @@ function writeStateToUI(S) {
 }
 
 /* --------------------------
-   7) Validación
+   7) Validación mínima
 ---------------------------*/
 function validateInputs(S) {
   const errors = [];
   const warns = [];
 
-  if (S.project.horizon_months < 12) warns.push("Horizonte < 12 meses: resultados pueden ser poco representativos.");
+  if (S.project.horizon_months < 12) warns.push("Horizonte < 12 meses.");
   if (!(S.project.tax_rate >= 0 && S.project.tax_rate <= 0.6)) errors.push("Impuesto fuera de rango (0..0.6).");
 
   if (!(S.rev.capacity_max > 0)) errors.push("Capacidad máxima debe ser > 0.");
-  if (!(S.rev.collection_factor >= 0 && S.rev.collection_factor <= 1)) errors.push("Factor cobranza debe estar entre 0 y 1.");
+  if (!(S.rev.collection_factor >= 0 && S.rev.collection_factor <= 1)) errors.push("Factor cobranza 0..1.");
 
   if (S.wc.enabled) {
     if (S.wc.dso < 0 || S.wc.dpo < 0 || S.wc.dio < 0) errors.push("DSO/DPO/DIO no pueden ser negativos.");
-    if (!(S.wc.ap_fixed_share >= 0 && S.wc.ap_fixed_share <= 1)) errors.push("% fijos elegibles en AP debe estar 0..1.");
+    if (!(S.wc.ap_fixed_share >= 0 && S.wc.ap_fixed_share <= 1)) errors.push("% fijos elegibles en AP debe ser 0..1.");
   }
 
   if (Math.abs((S.wacc.e_pct + S.wacc.d_pct) - 1.0) > 1e-6) warns.push("E% + D% no suma 100% (se usa tal cual).");
-  if (S.wacc.beta < 0) warns.push("Beta negativa: revisar.");
   if (S.wacc.tax_rate < 0 || S.wacc.tax_rate > 0.6) warns.push("Tasa impuesto WACC fuera de rango típico (0..0.6).");
 
   if (S.fin.enabled) {
@@ -604,8 +579,7 @@ function renderMessages(errors, warns) {
 ---------------------------*/
 function setText(id, text) {
   const n = byId(id);
-  if (!n) return;
-  n.textContent = text;
+  if (n) n.textContent = text;
 }
 
 function renderWaccCaption(S) {
@@ -629,6 +603,7 @@ function renderKPIs(res) {
   setText("r_irr_e_a", res.irr_e_a === null ? "N/D" : fmtPct(res.irr_e_a));
   setText("r_dscr_min", res.dscr_min === null ? "N/D" : res.dscr_min.toFixed(2));
   setText("r_buffer", fmtMoney(res.buffer_required));
+
   const fcfeSum = Array.isArray(res.fcfe) ? res.fcfe.reduce((a, b) => a + b, 0) : NaN;
   setText("r_fcfe_sum", fmtMoney(fcfeSum));
 
@@ -651,8 +626,8 @@ function renderKPIs(res) {
   }
 }
 
-function renderTable(df) {
-  const host = byId("table");
+function renderTable(df, hostId = "table") {
+  const host = byId(hostId);
   host.innerHTML = "";
 
   if (!Array.isArray(df) || df.length === 0) {
@@ -686,7 +661,6 @@ function renderTable(df) {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-
   host.appendChild(table);
 }
 
@@ -709,12 +683,12 @@ function doCalc() {
   const res = window.FinanceEngine.buildCashflowTable(S);
 
   renderKPIs(res);
-  renderTable(res.df);
+  renderTable(res.df, "table");
 
-  // ir a Resultados
+  // Cambiar a Resultados
   byId("tabResults").click();
 
-  // actualizar JSON view
+  // Actualizar JSON (sin descargar)
   const payload = { ...deepClone(S), meta: { exported_at: new Date().toISOString() } };
   const area = byId("jsonArea");
   if (area) area.value = JSON.stringify(payload, null, 2);
@@ -788,6 +762,7 @@ function deleteScenario() {
 
   localStorage.removeItem(DATA_PREFIX + name);
   setIndex(getIndex().filter(n => n !== name));
+
   refreshScenarioList("");
   refreshCompareUI();
 }
@@ -814,9 +789,8 @@ function importJSONFromArea() {
   try { payload = JSON.parse(txt); } catch { alert("JSON inválido."); return; }
 
   const S = payload.S ? payload.S : payload;
-
   if (!S.project || !S.rev || !S.cost || !S.wc || !S.wacc || !S.capex || !S.fin) {
-    alert("JSON no tiene la estructura esperada (project/rev/cost/wc/wacc/capex/fin).");
+    alert("JSON sin estructura esperada (project/rev/cost/wc/wacc/capex/fin).");
     return;
   }
 
@@ -854,375 +828,14 @@ function loadJSONFile() {
 }
 
 /* --------------------------
-   12) Comparación de escenarios
+   12) Comparación A vs B
 ---------------------------*/
-function refreshCompareUI() {
-  const base = byId("cmpBase");
-  const multi = byId("cmpMulti");
-  if (!base || !multi) return;
-
-  const names = getIndex().slice().sort((a, b) => a.localeCompare(b));
-
-  base.innerHTML = "";
-  multi.innerHTML = "";
-
-  if (names.length === 0) {
-    base.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
-    multi.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
-    return;
-  }
-
-  for (const n of names) {
-    base.appendChild(el("option", { value: n }, [n]));
-    multi.appendChild(el("option", { value: n }, [n]));
-  }
-
-  // default: el primero como base; y todos seleccionados en multi
-  base.value = names[0];
-  for (const opt of multi.options) opt.selected = true;
-}
-
-function loadScenarioStateByName(name) {
-  const raw = localStorage.getItem(DATA_PREFIX + name);
-  if (!raw) return null;
-  try {
-    const payload = JSON.parse(raw);
-    if (!payload || !payload.S) return null;
-    return payload.S;
-  } catch {
-    return null;
-  }
-}
-
-function computeResFromState(S) {
-  const { errors } = validateInputs(S);
-  if (errors.length) return { ok: false, errors, res: null };
-  const res = window.FinanceEngine.buildCashflowTable(S);
-  return { ok: true, errors: [], res };
-}
-
-function renderCompareTable(rows, baseName) {
-  const host = byId("cmpTable");
-  host.innerHTML = "";
-
-  if (!rows.length) {
-    host.appendChild(el("div", { style: { padding: "12px" } }, ["Sin datos."]));
-    return;
-  }
-
-  const cols = [
-    "Escenario",
-    "VAN",
-    "Δ VAN vs base",
-    "TIR anual",
-    "Δ TIR vs base",
-    "WACC anual",
-    "Payback",
-    "DSCR min",
-    "Buffer equity"
-  ];
-
-  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
-
-  const thead = el("thead");
-  const trh = el("tr");
-  for (const c of cols) {
-    trh.appendChild(el("th", {
-      style: { borderBottom: "1px solid #ddd", padding: "8px", position: "sticky", top: "0", background: "#fff" }
-    }, [c]));
-  }
-  thead.appendChild(trh);
-  table.appendChild(thead);
-
-  const tbody = el("tbody");
-  for (const r of rows) {
-    const tr = el("tr");
-    const isBase = r.name === baseName;
-
-    const cellStyle = {
-      borderBottom: "1px solid #f0f0f0",
-      padding: "6px 8px",
-      background: isBase ? "#f6fffb" : ""
-    };
-
-    const add = (txt) => tr.appendChild(el("td", { style: cellStyle }, [txt]));
-
-    add(r.name);
-    add(fmtMoney(r.van));
-    add(isFiniteNum(r.deltaVan) ? fmtMoney(r.deltaVan) : "N/D");
-    add(r.tirA === null ? "N/D" : fmtPct(r.tirA));
-    add(isFiniteNum(r.deltaTir) ? (r.deltaTir * 100).toFixed(2) + " pp" : "N/D");
-    add(fmtPct(r.waccA));
-    add(r.payback === null ? "N/D" : String(r.payback));
-    add(r.dscrMin === null ? "N/D" : fmtMaybeNumber(r.dscrMin, 2));
-    add(fmtMoney(r.buffer));
-
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  host.appendChild(table);
-}
-
-function runCompare() {
-  if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
-    alert("No se cargó engine.js (FinanceEngine).");
-    return;
-  }
-
-  const base = byId("cmpBase").value;
-  const multi = byId("cmpMulti");
-  const picked = Array.from(multi.selectedOptions).map(o => o.value).filter(Boolean);
-
-  const msg = byId("cmpMsg");
-  msg.innerHTML = "";
-
-  if (!base) {
-    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
-      ["Elegí un escenario base."]));
-    return;
-  }
-  if (picked.length === 0) {
-    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
-      ["Seleccioná al menos un escenario para comparar."]));
-    return;
-  }
-
-  const baseS = loadScenarioStateByName(base);
-  if (!baseS) {
-    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
-      ["No pude leer el escenario base desde localStorage."]));
-    return;
-  }
-
-  const baseOut = computeResFromState(baseS);
-  if (!baseOut.ok) {
-    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5", whiteSpace: "pre-wrap" } },
-      ["El escenario base tiene errores:\n- " + baseOut.errors.join("\n- ")]));
-    return;
-  }
-
-  const baseRes = baseOut.res;
-  const rows = [];
-
-  for (const name of picked) {
-    const S = loadScenarioStateByName(name);
-    if (!S) continue;
-
-    const out = computeResFromState(S);
-    if (!out.ok) {
-      rows.push({
-        name,
-        van: NaN, deltaVan: NaN,
-        tirA: null, deltaTir: NaN,
-        waccA: NaN, payback: null, dscrMin: null, buffer: NaN,
-        _error: out.errors
-      });
-      continue;
-    }
-
-    const r = out.res;
-
-    const van = r.van;
-    const tirA = r.tir_a; // puede ser null
-    const deltaVan = isFiniteNum(van) && isFiniteNum(baseRes.van) ? (van - baseRes.van) : NaN;
-    const deltaTir = (tirA !== null && baseRes.tir_a !== null) ? (tirA - baseRes.tir_a) : NaN;
-
-    rows.push({
-      name,
-      van,
-      deltaVan,
-      tirA,
-      deltaTir,
-      waccA: r.wacc_a,
-      payback: r.payback,
-      dscrMin: r.dscr_min,
-      buffer: r.buffer_required
-    });
-  }
-
-  // Orden: base primero, luego por VAN desc
-  rows.sort((a, b) => {
-    if (a.name === base) return -1;
-    if (b.name === base) return 1;
-    const av = isFiniteNum(a.van) ? a.van : -Infinity;
-    const bv = isFiniteNum(b.van) ? b.van : -Infinity;
-    return bv - av;
-  });
-
-  msg.appendChild(el("div", {
-    style: { padding: "10px", borderRadius: "10px", border: "1px solid #999", background: "#f7f7ff" }
-  }, [`Base: "${base}". Comparando ${rows.length} escenario(s).`]));
-
-  renderCompareTable(rows, base);
-}
-
-function pickAllCompare() {
-  const multi = byId("cmpMulti");
-  if (!multi) return;
-  for (const opt of multi.options) opt.selected = !!opt.value;
-}
-function pickNoneCompare() {
-  const multi = byId("cmpMulti");
-  if (!multi) return;
-  for (const opt of multi.options) opt.selected = false;
-}
-
-/* ==========================
-   ESCENARIOS (guardar / cargar / eliminar)
-========================== */
-
-const SC_INDEX_KEY = "finanzas.scenarios.index.v1";
-const SC_DATA_PREFIX = "finanzas.scenario.v1.";
-
-function getScenarioIndex() {
-  try {
-    return JSON.parse(localStorage.getItem(SC_INDEX_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function setScenarioIndex(arr) {
-  localStorage.setItem(SC_INDEX_KEY, JSON.stringify(arr));
-}
-
-function saveScenario() {
-  const nameInput = document.getElementById("scName");
-  if (!nameInput) {
-    alert("No existe el input de nombre de escenario (scName)");
-    return;
-  }
-
-  const name = nameInput.value.trim();
-  if (!name) {
-    alert("Poné un nombre de escenario");
-    nameInput.focus();
-    return;
-  }
-
-  const S = readStateFromUI();
-  const payload = {
-    S,
-    meta: { savedAt: new Date().toISOString() }
-  };
-
-  localStorage.setItem(SC_DATA_PREFIX + name, JSON.stringify(payload));
-
-  const idx = new Set(getScenarioIndex());
-  idx.add(name);
-  setScenarioIndex([...idx]);
-
-  refreshScenarioList(name);
-  fillCompareSelectors();
-
-  doCalc();
-}
-
-function loadScenario() {
-  const sel = document.getElementById("scList");
-  if (!sel || !sel.value) return;
-
-  const raw = localStorage.getItem(SC_DATA_PREFIX + sel.value);
-  if (!raw) {
-    alert("Escenario no encontrado");
-    return;
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    alert("Escenario corrupto");
-    return;
-  }
-
-  if (!payload.S) {
-    alert("Escenario inválido (sin estado)");
-    return;
-  }
-
-  writeStateToUI(payload.S);
-  document.getElementById("scName").value = sel.value;
-
-  renderWaccCaption(payload.S);
-  doCalc();
-}
-
-function deleteScenario() {
-  const sel = document.getElementById("scList");
-  if (!sel || !sel.value) return;
-
-  const name = sel.value;
-  if (!confirm(`Eliminar escenario "${name}"?`)) return;
-
-  localStorage.removeItem(SC_DATA_PREFIX + name);
-  setScenarioIndex(getScenarioIndex().filter(n => n !== name));
-
-  refreshScenarioList("");
-  fillCompareSelectors();
-}
-
-function newScenario() {
-  writeStateToUI(deepClone(DEFAULT_STATE));
-  document.getElementById("scName").value = "";
-  renderWaccCaption(readStateFromUI());
-  renderMessages([], []);
-}
-
-function refreshScenarioList(selected = "") {
-  const sel = document.getElementById("scList");
-  if (!sel) return;
-
-  const names = getScenarioIndex().sort();
-  sel.innerHTML = "";
-
-  if (!names.length) {
-    sel.appendChild(new Option("(sin escenarios)", ""));
-    return;
-  }
-
-  for (const n of names) {
-    const opt = new Option(n, n);
-    if (n === selected) opt.selected = true;
-    sel.appendChild(opt);
-  }
-}
-
-/* =========================================================
-   Comparación de escenarios (A vs B) — BLOQUE COMPLETO
-   Pegalo dentro de app.js (una sola vez), ANTES de wire().
-
-   Requiere:
-   - engine.js cargado (window.FinanceEngine.buildCashflowTable)
-   - escenarios guardados en localStorage con:
-       INDEX_KEY  = "finanzas.scenarios.index.v3"
-       DATA_PREFIX= "finanzas.scenario.v3."
-     y el formato { S: {...}, meta: {...} } (como tu saveScenario()).
-   - IDs en index.html:
-       cmpA, cmpB, btnCompare, cmpKPIs, cmpTable
-========================================================= */
-
-function getScenarioStateByName(name) {
-  const n = safeName(name);
-  if (!n) return null;
-  const raw = localStorage.getItem(DATA_PREFIX + n);
-  if (!raw) return null;
-  try {
-    const payload = JSON.parse(raw);
-    if (payload && payload.S) return payload.S;
-    // fallback si guardaste directo el estado
-    if (payload && payload.project && payload.rev) return payload;
-  } catch (_) {}
-  return null;
-}
-
-function fillCompareSelectors(keepA = "", keepB = "") {
+function fillCompareSelectors() {
   const a = byId("cmpA");
   const b = byId("cmpB");
   if (!a || !b) return;
 
   const names = getIndex().slice().sort((x, y) => x.localeCompare(y));
-
   a.innerHTML = "";
   b.innerHTML = "";
 
@@ -1237,413 +850,261 @@ function fillCompareSelectors(keepA = "", keepB = "") {
     b.appendChild(el("option", { value: n }, [n]));
   }
 
-  // Default selección: A=primero, B=segundo (o primero si hay 1)
-  const defA = keepA && names.includes(keepA) ? keepA : names[0];
-  const defB =
-    keepB && names.includes(keepB)
-      ? keepB
-      : (names.length >= 2 ? names[1] : names[0]);
-
-  a.value = defA;
-  b.value = defB;
+  // defaults: A=primero, B=segundo si existe
+  a.value = names[0] || "";
+  b.value = names[1] || names[0] || "";
 }
 
-function fmtDeltaMoney(x) {
-  if (!isFiniteNum(x)) return "N/D";
-  const sign = x > 0 ? "+" : "";
-  return sign + fmtMoney(x);
+function refreshCompareUI() {
+  fillCompareSelectors();
 }
 
-function fmtDeltaPct(x) {
-  if (!isFiniteNum(x)) return "N/D";
-  const sign = x > 0 ? "+" : "";
-  return sign + fmtPct(x);
+function loadScenarioStateByName(name) {
+  const raw = localStorage.getItem(DATA_PREFIX + name);
+  if (!raw) return null;
+  let payload;
+  try { payload = JSON.parse(raw); } catch { return null; }
+  return payload && payload.S ? payload.S : null;
+}
+
+function kpiRow(label, aVal, bVal, fmtFn) {
+  const diff = (isFiniteNum(aVal) && isFiniteNum(bVal)) ? (bVal - aVal) : NaN;
+  return {
+    Métrica: label,
+    A: fmtFn(aVal),
+    B: fmtFn(bVal),
+    "Δ (B-A)": (isFiniteNum(diff) ? fmtFn(diff) : "N/D"),
+  };
+}
+
+function renderCompareKPIs(resA, resB, nameA, nameB) {
+  const host = byId("cmpKPIs");
+  host.innerHTML = "";
+
+  const rows = [
+    kpiRow("VAN (USD)", resA.van, resB.van, fmtMoney),
+    kpiRow("TIR anual eq.", resA.tir_a, resB.tir_a, fmtPct),
+    kpiRow("WACC anual", resA.wacc_a, resB.wacc_a, fmtPct),
+    { Métrica: "Payback (mes)", A: resA.payback ?? "N/D", B: resB.payback ?? "N/D", "Δ (B-A)": "—" },
+    { Métrica: "Payback desc. (mes)", A: resA.discounted_payback ?? "N/D", B: resB.discounted_payback ?? "N/D", "Δ (B-A)": "—" },
+    kpiRow("TIR Equity anual eq.", resA.irr_e_a, resB.irr_e_a, fmtPct),
+    { Métrica: "DSCR mínimo", A: resA.dscr_min === null ? "N/D" : resA.dscr_min.toFixed(2), B: resB.dscr_min === null ? "N/D" : resB.dscr_min.toFixed(2), "Δ (B-A)": "—" },
+    kpiRow("Buffer equity (USD)", resA.buffer_required, resB.buffer_required, fmtMoney),
+  ];
+
+  host.appendChild(el("div", { style: { fontWeight: "800", marginBottom: "8px" } }, [`A = ${nameA} | B = ${nameB}`]));
+  host.appendChild(renderSimpleTable(rows));
+}
+
+function renderSimpleTable(rows) {
+  if (!rows.length) return el("div", {}, ["Sin datos."]);
+
+  const cols = Object.keys(rows[0]);
+  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
+
+  const thead = el("thead");
+  const trh = el("tr");
+  for (const c of cols) {
+    trh.appendChild(el("th", { style: { borderBottom: "1px solid #ddd", padding: "8px", background: "#fff", textAlign: "left" } }, [c]));
+  }
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  for (const r of rows) {
+    const tr = el("tr");
+    for (const c of cols) {
+      tr.appendChild(el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px 8px" } }, [String(r[c] ?? "")]));
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+function cumulative(arr) {
+  const out = [];
+  let s = 0;
+  for (const x of arr) { s += (isFiniteNum(x) ? x : 0); out.push(s); }
+  return out;
+}
+
+function drawLineChart(canvasId, seriesA, seriesB, nameA, nameB) {
+  const c = byId(canvasId);
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  const w = c.width, h = c.height;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+
+  const pad = 28;
+
+  const n = Math.min(seriesA.length, seriesB.length);
+  const A = seriesA.slice(0, n);
+  const B = seriesB.slice(0, n);
+
+  const all = A.concat(B).filter(isFiniteNum);
+  let minY = Math.min(...all);
+  let maxY = Math.max(...all);
+  if (!isFiniteNum(minY) || !isFiniteNum(maxY) || minY === maxY) {
+    minY = minY || 0; maxY = maxY || 1;
+    if (minY === maxY) maxY = minY + 1;
+  }
+
+  // axes
+  ctx.strokeStyle = "#ccc";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad);
+  ctx.lineTo(pad, h - pad);
+  ctx.lineTo(w - pad, h - pad);
+  ctx.stroke();
+
+  function x(i) {
+    return pad + (i / (n - 1 || 1)) * (w - 2 * pad);
+  }
+  function y(v) {
+    const t = (v - minY) / (maxY - minY);
+    return (h - pad) - t * (h - 2 * pad);
+  }
+
+  // series A (negro)
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const px = x(i), py = y(A[i]);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // series B (gris)
+  ctx.strokeStyle = "#777";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const px = x(i), py = y(B[i]);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // legend
+  ctx.fillStyle = "#111";
+  ctx.font = "12px system-ui, Segoe UI, Arial";
+  ctx.fillText(`A: ${nameA}`, pad, 16);
+  ctx.fillStyle = "#777";
+  ctx.fillText(`B: ${nameB}`, pad + 220, 16);
+
+  // min/max labels
+  ctx.fillStyle = "#333";
+  ctx.fillText(fmtMoney(maxY), 6, pad + 4);
+  ctx.fillText(fmtMoney(minY), 6, h - pad);
 }
 
 function compareScenarios() {
-  // Validación motor
   if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
     alert("No se cargó engine.js (FinanceEngine).");
     return;
   }
 
-  const selA = byId("cmpA");
-  const selB = byId("cmpB");
-  const outKPIs = byId("cmpKPIs");
-  const outTable = byId("cmpTable");
-  if (!selA || !selB || !outKPIs || !outTable) return;
+  const nameA = safeName(byId("cmpA")?.value);
+  const nameB = safeName(byId("cmpB")?.value);
+  if (!nameA || !nameB) { alert("Elegí escenarios A y B."); return; }
 
-  const nameA = safeName(selA.value);
-  const nameB = safeName(selB.value);
+  const SA = loadScenarioStateByName(nameA);
+  const SB = loadScenarioStateByName(nameB);
+  if (!SA || !SB) { alert("No pude cargar uno de los escenarios."); return; }
 
-  if (!nameA || !nameB) {
-    outKPIs.innerHTML = "";
-    outTable.innerHTML = "";
-    outKPIs.appendChild(el("div", { class: "note" }, ["Seleccioná A y B."]));
+  // Validación rápida (por si guardaron algo roto)
+  const va = validateInputs(SA);
+  const vb = validateInputs(SB);
+  if (va.errors.length || vb.errors.length) {
+    alert("Uno de los escenarios tiene errores de inputs. Cargalo en Inputs y corregí.");
     return;
   }
 
-  const SA = getScenarioStateByName(nameA);
-  const SB = getScenarioStateByName(nameB);
-
-  if (!SA || !SB) {
-    outKPIs.innerHTML = "";
-    outTable.innerHTML = "";
-    outKPIs.appendChild(el("div", { class: "err" }, ["No pude cargar uno de los escenarios (A o B)."]));
-    return;
-  }
-
-  // Calcula ambos
   const resA = window.FinanceEngine.buildCashflowTable(SA);
   const resB = window.FinanceEngine.buildCashflowTable(SB);
 
-  // ------- KPIs comparativos -------
-  const rows = [
-    { k: "VAN (USD)", a: resA.van, b: resB.van, fmt: fmtMoney, dFmt: fmtDeltaMoney },
-    { k: "TIR mensual", a: resA.tir_m, b: resB.tir_m, fmt: fmtPct, dFmt: fmtDeltaPct },
-    { k: "TIR anual eq.", a: resA.tir_a, b: resB.tir_a, fmt: fmtPct, dFmt: fmtDeltaPct },
-    { k: "WACC anual", a: resA.wacc_a, b: resB.wacc_a, fmt: fmtPct, dFmt: fmtDeltaPct },
-    { k: "Payback (mes)", a: resA.payback, b: resB.payback, fmt: (x)=> (x===null?"N/D":String(x)), dFmt: (x)=> (x===null||!isFiniteNum(x)?"N/D":(x>0?"+":"")+String(x)) },
-    { k: "Payback desc. (mes)", a: resA.discounted_payback, b: resB.discounted_payback, fmt: (x)=> (x===null?"N/D":String(x)), dFmt: (x)=> (x===null||!isFiniteNum(x)?"N/D":(x>0?"+":"")+String(x)) },
-    { k: "TIR Equity anual eq.", a: resA.irr_e_a, b: resB.irr_e_a, fmt: fmtPct, dFmt: fmtDeltaPct },
-    { k: "DSCR mínimo", a: resA.dscr_min, b: resB.dscr_min, fmt: (x)=> (x===null?"N/D":x.toFixed(2)), dFmt: (x)=> (!isFiniteNum(x)?"N/D":(x>0?"+":"")+x.toFixed(2)) },
-    { k: "Buffer requerido (USD)", a: resA.buffer_required, b: resB.buffer_required, fmt: fmtMoney, dFmt: fmtDeltaMoney },
-  ];
+  renderCompareKPIs(resA, resB, nameA, nameB);
 
-  function delta(a, b) {
-    if (a === null || b === null) return null;
-    const na = Number(a), nb = Number(b);
-    if (!isFiniteNum(na) || !isFiniteNum(nb)) return null;
-    return nb - na; // B - A
-  }
-
-  outKPIs.innerHTML = "";
-  const kpiTable = el("table", { style: { width:"100%", borderCollapse:"collapse", fontSize:"12px" } });
-  const thead = el("thead");
-  thead.appendChild(el("tr", {}, [
-    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, ["Métrica"]),
-    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, [`A: ${nameA}`]),
-    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, [`B: ${nameB}`]),
-    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, ["Δ (B−A)"]),
-  ]));
-  kpiTable.appendChild(thead);
-
-  const tbody = el("tbody");
-  for (const r of rows) {
-    const d = delta(r.a, r.b);
-    tbody.appendChild(el("tr", {}, [
-      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px", fontWeight:"600" } }, [r.k]),
-      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [r.a === null ? "N/D" : r.fmt(r.a)]),
-      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [r.b === null ? "N/D" : r.fmt(r.b)]),
-      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [d === null ? "N/D" : r.dFmt(d)]),
-    ]));
-  }
-  kpiTable.appendChild(tbody);
-
-  outKPIs.appendChild(el("div", { class: "note", style:{ marginBottom:"8px" } }, [
-    "Convención: Δ = B − A. Positivo favorece a B (según la métrica)."
-  ]));
-  outKPIs.appendChild(el("div", { style:{ border:"1px solid #ddd", borderRadius:"10px", overflow:"hidden" } }, [kpiTable]));
-
-  // ------- Tabla mensual: Δ por mes (B - A) -------
-  outTable.innerHTML = "";
-
-  // Definimos columnas clave (podés sumar/quitar)
-  const cols = [
-    "Mes",
-    "Ingresos",
-    "Opex_total",
-    "EBITDA",
-    "Impuestos",
-    "ΔWC",
-    "CapEx",
-    "FCFF_mes",
-    "Servicio_deuda",
-    "DSCR",
-    "FCFE_mes",
-  ];
-
-  const dfA = Array.isArray(resA.df) ? resA.df : [];
-  const dfB = Array.isArray(resB.df) ? resB.df : [];
+  // Tabla: delta por mes en columnas clave (FCFF_mes / FCFE_mes / DSCR)
+  const dfA = resA.df || [];
+  const dfB = resB.df || [];
   const n = Math.min(dfA.length, dfB.length);
 
-  if (n === 0) {
-    outTable.appendChild(el("div", { style:{ padding:"12px" } }, ["Sin datos para comparar."]));
-    return;
-  }
-
-  const t = el("table", { style: { width:"100%", borderCollapse:"collapse", fontSize:"12px" } });
-  const th = el("thead");
-  const trh = el("tr");
-  for (const c of cols) {
-    trh.appendChild(el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", position:"sticky", top:"0", background:"#fff" } }, [c]));
-  }
-  th.appendChild(trh);
-  t.appendChild(th);
-
-  const tb = el("tbody");
+  const rows = [];
   for (let i = 0; i < n; i++) {
-    const ra = dfA[i] || {};
-    const rb = dfB[i] || {};
-    const tr = el("tr");
-
-    for (const c of cols) {
-      let v;
-      if (c === "Mes") {
-        v = rb.Mes ?? ra.Mes ?? (i + 1);
-        tr.appendChild(el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [String(v)]));
-        continue;
-      }
-
-      const aVal = Number(ra[c]);
-      const bVal = Number(rb[c]);
-      if (isFiniteNum(aVal) && isFiniteNum(bVal)) v = bVal - aVal;
-      else v = NaN;
-
-      let txt = "N/D";
-      if (isFiniteNum(v)) txt = (v >= 0 ? "+" : "") + v.toFixed(2);
-
-      tr.appendChild(el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [txt]));
-    }
-
-    tb.appendChild(tr);
+    const a = dfA[i], b = dfB[i];
+    rows.push({
+      Mes: a.Mes,
+      "Δ FCFF_mes": isFiniteNum(b.FCFF_mes) && isFiniteNum(a.FCFF_mes) ? (b.FCFF_mes - a.FCFF_mes) : NaN,
+      "Δ FCFE_mes": isFiniteNum(b.FCFE_mes) && isFiniteNum(a.FCFE_mes) ? (b.FCFE_mes - a.FCFE_mes) : NaN,
+      "DSCR A": isFiniteNum(a.DSCR) ? a.DSCR : NaN,
+      "DSCR B": isFiniteNum(b.DSCR) ? b.DSCR : NaN,
+    });
   }
-  t.appendChild(tb);
 
-  outTable.appendChild(el("div", { class: "note", style:{ margin:"8px 0" } }, [
-    "Tabla: Δ mensual = (B − A) por columna."
-  ]));
-  outTable.appendChild(t);
+  // Render tabla de deltas (formato num)
+  const cmpHost = byId("cmpTable");
+  cmpHost.innerHTML = "";
+  cmpHost.appendChild(renderSimpleTable(rows.map(r => ({
+    Mes: r.Mes,
+    "Δ FCFF_mes": isFiniteNum(r["Δ FCFF_mes"]) ? r["Δ FCFF_mes"].toFixed(2) : "N/D",
+    "Δ FCFE_mes": isFiniteNum(r["Δ FCFE_mes"]) ? r["Δ FCFE_mes"].toFixed(2) : "N/D",
+    "DSCR A": isFiniteNum(r["DSCR A"]) ? r["DSCR A"].toFixed(2) : "—",
+    "DSCR B": isFiniteNum(r["DSCR B"]) ? r["DSCR B"].toFixed(2) : "—",
+  }))));
+
+  // Curvas acumuladas
+  const fcffCumA = cumulative(resA.fcff || []);
+  const fcffCumB = cumulative(resB.fcff || []);
+  const fcfeCumA = cumulative(resA.fcfe || []);
+  const fcfeCumB = cumulative(resB.fcfe || []);
+
+  drawLineChart("cmpCanvasFCFF", fcffCumA, fcffCumB, nameA, nameB);
+  drawLineChart("cmpCanvasFCFE", fcfeCumA, fcfeCumB, nameA, nameB);
 }
-
-/* =========================================================
-   Hook: llamalo desde wire() luego de refreshScenarioList()
-
-   - fillCompareSelectors();
-   - byId("btnCompare").addEventListener("click", compareScenarios);
-
-   Y cada vez que guardás/eliminás escenario:
-   - fillCompareSelectors(keepA, keepB)
-========================================================= */
-
-function cumulate(arr) {
-  let s = 0;
-  return arr.map(v => (s += v));
-}
-
-function drawLineChart({ host, series, width = 520, height = 260 }) {
-  host.innerHTML = "";
-
-  if (!series || series.length === 0) {
-    host.textContent = "Sin datos.";
-    return;
-  }
-
-  const padding = 40;
-  const allValues = series.flatMap(s => s.data);
-  const minY = Math.min(...allValues);
-  const maxY = Math.max(...allValues);
-
-  const maxLen = Math.max(...series.map(s => s.data.length));
-  if (maxLen < 2) {
-    host.textContent = "Serie demasiado corta.";
-    return;
-  }
-
-  const xScale = i => padding + (i / (maxLen - 1)) * (width - 2 * padding);
-  const yScale = v => height - padding - ((v - minY) / (maxY - minY || 1)) * (height - 2 * padding);
-
-  const svgNS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNS, "svg");
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  svg.style.border = "1px solid #ddd";
-  svg.style.borderRadius = "10px";
-  svg.style.background = "#fff";
-
-  // Ejes
-  const xAxis = document.createElementNS(svgNS, "line");
-  xAxis.setAttribute("x1", padding);
-  xAxis.setAttribute("x2", width - padding);
-  xAxis.setAttribute("y1", height - padding);
-  xAxis.setAttribute("y2", height - padding);
-  xAxis.setAttribute("stroke", "#aaa");
-  svg.appendChild(xAxis);
-
-  const yAxis = document.createElementNS(svgNS, "line");
-  yAxis.setAttribute("x1", padding);
-  yAxis.setAttribute("x2", padding);
-  yAxis.setAttribute("y1", padding);
-  yAxis.setAttribute("y2", height - padding);
-  yAxis.setAttribute("stroke", "#aaa");
-  svg.appendChild(yAxis);
-
-  // Min/Max labels
-  const tMin = document.createElementNS(svgNS, "text");
-  tMin.setAttribute("x", "6");
-  tMin.setAttribute("y", String(height - padding));
-  tMin.setAttribute("font-size", "10");
-  tMin.setAttribute("fill", "#555");
-  tMin.textContent = minY.toFixed(0);
-  svg.appendChild(tMin);
-
-  const tMax = document.createElementNS(svgNS, "text");
-  tMax.setAttribute("x", "6");
-  tMax.setAttribute("y", String(padding + 4));
-  tMax.setAttribute("font-size", "10");
-  tMax.setAttribute("fill", "#555");
-  tMax.textContent = maxY.toFixed(0);
-  svg.appendChild(tMax);
-
-  // Series
-  series.forEach((s) => {
-    const path = document.createElementNS(svgNS, "path");
-    const d = s.data
-      .map((v, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(v)}`)
-      .join(" ");
-
-    path.setAttribute("d", d);
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", s.color || "#000");
-    path.setAttribute("stroke-width", s.base ? "3" : "1.6");
-    path.setAttribute("opacity", s.base ? "1" : "0.85");
-
-    svg.appendChild(path);
-  });
-
-  host.appendChild(svg);
-
-  // Leyenda simple
-  const legend = document.createElement("div");
-  legend.style.display = "flex";
-  legend.style.flexWrap = "wrap";
-  legend.style.gap = "10px";
-  legend.style.marginTop = "8px";
-  legend.style.fontSize = "12px";
-
-  series.forEach(s => {
-    const item = document.createElement("div");
-    item.style.display = "flex";
-    item.style.alignItems = "center";
-    item.style.gap = "6px";
-
-    const dot = document.createElement("span");
-    dot.style.display = "inline-block";
-    dot.style.width = "10px";
-    dot.style.height = "10px";
-    dot.style.borderRadius = "50%";
-    dot.style.background = s.color || "#000";
-    dot.style.outline = s.base ? "2px solid #000" : "none";
-
-    const name = document.createElement("span");
-    name.textContent = s.name + (s.base ? " (base)" : "");
-
-    item.appendChild(dot);
-    item.appendChild(name);
-    legend.appendChild(item);
-  });
-
-  host.appendChild(legend);
-}
-
-function drawScenarioCurves() {
-  const hostFCFF = byId("chartFCFF");
-  const hostFCFE = byId("chartFCFE");
-  if (!hostFCFF || !hostFCFE) return;
-
-  const names = getIndex();
-  if (!names || names.length === 0) {
-    hostFCFF.textContent = "No hay escenarios guardados.";
-    hostFCFE.textContent = "No hay escenarios guardados.";
-    return;
-  }
-
-  // Base = selector A si existe, sino el primero
-  const baseName = (byId("cmpA") && byId("cmpA").value) ? byId("cmpA").value : names[0];
-
-  const seriesFCFF = [];
-  const seriesFCFE = [];
-
-  // Colores determinísticos por índice
-  const sorted = names.slice().sort((a, b) => a.localeCompare(b));
-
-  for (let idx = 0; idx < sorted.length; idx++) {
-    const name = sorted[idx];
-    const S = getScenarioStateByName(name);
-    if (!S) continue;
-
-    const res = FinanceEngine.buildCashflowTable(S);
-
-    const fcffCum = cumulate(res.fcff.slice(1));
-    const fcfeCum = cumulate(res.fcfe.slice(1));
-
-    const color = `hsl(${(idx * 67) % 360},70%,42%)`;
-
-    seriesFCFF.push({ name, data: fcffCum, color, base: name === baseName });
-    seriesFCFE.push({ name, data: fcfeCum, color, base: name === baseName });
-  }
-
-  drawLineChart({ host: hostFCFF, series: seriesFCFF });
-  drawLineChart({ host: hostFCFE, series: seriesFCFE });
-}
-
 
 /* --------------------------
-   13) Wire up (COMPLETO y robusto)
+   13) Wire (único)
 ---------------------------*/
-function onClick(id, fn) {
-  const el = byId(id);
-  if (!el) return false;
-  el.addEventListener("click", fn);
-  return true;
-}
-
 function wire() {
   ensureUI();
-const b = byId("btnDrawCurves");
-if (b) b.addEventListener("click", drawScenarioCurves);
 
-  // Defaults
+  // defaults
   writeStateToUI(deepClone(DEFAULT_STATE));
   renderWaccCaption(readStateFromUI());
 
-  // Escenarios
+  // escenarios list
   refreshScenarioList("");
+  refreshCompareUI();
 
-  // Compare (si existe UI de compare, la engancha; si no existe, no rompe)
-  if (typeof fillCompareSelectors === "function") fillCompareSelectors();
-  if (typeof refreshCompareUI === "function") refreshCompareUI();
+  // botones base
+  byId("btnCalc").addEventListener("click", doCalc);
+  byId("btnReset").addEventListener("click", newScenario);
 
-  // Botones base
-  onClick("btnCalc", doCalc);
-  onClick("btnReset", newScenario);
-
-  // Escenarios (CRUD)
-  onClick("btnSaveSc", saveScenario);
-  onClick("btnLoadSc", loadScenario);
-  onClick("btnDelSc", deleteScenario);
-  onClick("btnNewSc", newScenario);
+  // escenarios
+  byId("btnSaveSc").addEventListener("click", saveScenario);
+  byId("btnLoadSc").addEventListener("click", loadScenario);
+  byId("btnDelSc").addEventListener("click", deleteScenario);
+  byId("btnNewSc").addEventListener("click", newScenario);
 
   // JSON
-  onClick("btnExportJSON", exportJSONToArea);
-  onClick("btnImportJSON", importJSONFromArea);
-  onClick("btnDownloadJSON", downloadJSON);
-  onClick("btnLoadFileJSON", loadJSONFile);
+  byId("btnExportJSON").addEventListener("click", exportJSONToArea);
+  byId("btnImportJSON").addEventListener("click", importJSONFromArea);
+  byId("btnDownloadJSON").addEventListener("click", downloadJSON);
+  byId("btnLoadFileJSON").addEventListener("click", loadJSONFile);
 
-  // Compare (unificado: preferimos runCompare; si quedó un botón viejo btnCompare, lo mapeamos también)
-  if (typeof runCompare === "function") {
-    onClick("btnRunCompare", runCompare);
-    onClick("btnCompare", runCompare); // compatibilidad si existe
-  } else if (typeof compareScenarios === "function") {
-    onClick("btnRunCompare", compareScenarios);
-    onClick("btnCompare", compareScenarios);
-  }
+  // compare
+  byId("btnCompare").addEventListener("click", compareScenarios);
 
-  if (typeof pickAllCompare === "function") onClick("btnPickAll", pickAllCompare);
-  if (typeof pickNoneCompare === "function") onClick("btnPickNone", pickNoneCompare);
-
-  // WACC caption live (si existen inputs)
-  const waccIds = ["e_pct", "d_pct", "rf", "mrp", "beta", "spread", "wacc_tax_rate"];
+  // WACC caption live
+  const waccIds = ["e_pct","d_pct","rf","mrp","beta","spread","wacc_tax_rate"];
   for (const id of waccIds) {
     const e = byId(id);
     if (e) e.addEventListener("input", () => renderWaccCaption(readStateFromUI()));
@@ -1651,3 +1112,4 @@ if (b) b.addEventListener("click", drawScenarioCurves);
 }
 
 window.addEventListener("load", wire);
+
