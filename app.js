@@ -357,7 +357,6 @@ function buildCompareView(host) {
   if (!host) return;
   host.innerHTML = "";
 
-  // Comparación A vs B
   const compBox = section("Comparación de escenarios", [
     el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
       el("span", { style: { fontWeight: "700" } }, ["A:"]),
@@ -369,6 +368,27 @@ function buildCompareView(host) {
     el("div", { id: "cmpKPIs", style: { marginTop: "12px" } }),
     el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
   ]);
+
+  const curvesBox = section("Curvas comparadas", [
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
+      el("button", { id: "btnDrawCurves", type: "button" }, ["Dibujar curvas"]),
+    ]),
+    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "10px" } }, [
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFF acumulado"]),
+        el("div", { id: "chartFCFF" }),
+      ]),
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFE acumulado (Equity)"]),
+        el("div", { id: "chartFCFE" }),
+      ]),
+    ]),
+  ]);
+
+  host.appendChild(compBox);
+  host.appendChild(curvesBox);
+}
+
 
   // Curvas comparadas
   const curvesBox = section("Curvas comparadas", [
