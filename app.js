@@ -1168,6 +1168,244 @@ function refreshScenarioList(selected = "") {
   }
 }
 
+/* =========================================================
+   Comparación de escenarios (A vs B) — BLOQUE COMPLETO
+   Pegalo dentro de app.js (una sola vez), ANTES de wire().
+
+   Requiere:
+   - engine.js cargado (window.FinanceEngine.buildCashflowTable)
+   - escenarios guardados en localStorage con:
+       INDEX_KEY  = "finanzas.scenarios.index.v3"
+       DATA_PREFIX= "finanzas.scenario.v3."
+     y el formato { S: {...}, meta: {...} } (como tu saveScenario()).
+   - IDs en index.html:
+       cmpA, cmpB, btnCompare, cmpKPIs, cmpTable
+========================================================= */
+
+function getScenarioStateByName(name) {
+  const n = safeName(name);
+  if (!n) return null;
+  const raw = localStorage.getItem(DATA_PREFIX + n);
+  if (!raw) return null;
+  try {
+    const payload = JSON.parse(raw);
+    if (payload && payload.S) return payload.S;
+    // fallback si guardaste directo el estado
+    if (payload && payload.project && payload.rev) return payload;
+  } catch (_) {}
+  return null;
+}
+
+function fillCompareSelectors(keepA = "", keepB = "") {
+  const a = byId("cmpA");
+  const b = byId("cmpB");
+  if (!a || !b) return;
+
+  const names = getIndex().slice().sort((x, y) => x.localeCompare(y));
+
+  a.innerHTML = "";
+  b.innerHTML = "";
+
+  if (names.length === 0) {
+    a.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
+    b.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
+    return;
+  }
+
+  for (const n of names) {
+    a.appendChild(el("option", { value: n }, [n]));
+    b.appendChild(el("option", { value: n }, [n]));
+  }
+
+  // Default selección: A=primero, B=segundo (o primero si hay 1)
+  const defA = keepA && names.includes(keepA) ? keepA : names[0];
+  const defB =
+    keepB && names.includes(keepB)
+      ? keepB
+      : (names.length >= 2 ? names[1] : names[0]);
+
+  a.value = defA;
+  b.value = defB;
+}
+
+function fmtDeltaMoney(x) {
+  if (!isFiniteNum(x)) return "N/D";
+  const sign = x > 0 ? "+" : "";
+  return sign + fmtMoney(x);
+}
+
+function fmtDeltaPct(x) {
+  if (!isFiniteNum(x)) return "N/D";
+  const sign = x > 0 ? "+" : "";
+  return sign + fmtPct(x);
+}
+
+function compareScenarios() {
+  // Validación motor
+  if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
+    alert("No se cargó engine.js (FinanceEngine).");
+    return;
+  }
+
+  const selA = byId("cmpA");
+  const selB = byId("cmpB");
+  const outKPIs = byId("cmpKPIs");
+  const outTable = byId("cmpTable");
+  if (!selA || !selB || !outKPIs || !outTable) return;
+
+  const nameA = safeName(selA.value);
+  const nameB = safeName(selB.value);
+
+  if (!nameA || !nameB) {
+    outKPIs.innerHTML = "";
+    outTable.innerHTML = "";
+    outKPIs.appendChild(el("div", { class: "note" }, ["Seleccioná A y B."]));
+    return;
+  }
+
+  const SA = getScenarioStateByName(nameA);
+  const SB = getScenarioStateByName(nameB);
+
+  if (!SA || !SB) {
+    outKPIs.innerHTML = "";
+    outTable.innerHTML = "";
+    outKPIs.appendChild(el("div", { class: "err" }, ["No pude cargar uno de los escenarios (A o B)."]));
+    return;
+  }
+
+  // Calcula ambos
+  const resA = window.FinanceEngine.buildCashflowTable(SA);
+  const resB = window.FinanceEngine.buildCashflowTable(SB);
+
+  // ------- KPIs comparativos -------
+  const rows = [
+    { k: "VAN (USD)", a: resA.van, b: resB.van, fmt: fmtMoney, dFmt: fmtDeltaMoney },
+    { k: "TIR mensual", a: resA.tir_m, b: resB.tir_m, fmt: fmtPct, dFmt: fmtDeltaPct },
+    { k: "TIR anual eq.", a: resA.tir_a, b: resB.tir_a, fmt: fmtPct, dFmt: fmtDeltaPct },
+    { k: "WACC anual", a: resA.wacc_a, b: resB.wacc_a, fmt: fmtPct, dFmt: fmtDeltaPct },
+    { k: "Payback (mes)", a: resA.payback, b: resB.payback, fmt: (x)=> (x===null?"N/D":String(x)), dFmt: (x)=> (x===null||!isFiniteNum(x)?"N/D":(x>0?"+":"")+String(x)) },
+    { k: "Payback desc. (mes)", a: resA.discounted_payback, b: resB.discounted_payback, fmt: (x)=> (x===null?"N/D":String(x)), dFmt: (x)=> (x===null||!isFiniteNum(x)?"N/D":(x>0?"+":"")+String(x)) },
+    { k: "TIR Equity anual eq.", a: resA.irr_e_a, b: resB.irr_e_a, fmt: fmtPct, dFmt: fmtDeltaPct },
+    { k: "DSCR mínimo", a: resA.dscr_min, b: resB.dscr_min, fmt: (x)=> (x===null?"N/D":x.toFixed(2)), dFmt: (x)=> (!isFiniteNum(x)?"N/D":(x>0?"+":"")+x.toFixed(2)) },
+    { k: "Buffer requerido (USD)", a: resA.buffer_required, b: resB.buffer_required, fmt: fmtMoney, dFmt: fmtDeltaMoney },
+  ];
+
+  function delta(a, b) {
+    if (a === null || b === null) return null;
+    const na = Number(a), nb = Number(b);
+    if (!isFiniteNum(na) || !isFiniteNum(nb)) return null;
+    return nb - na; // B - A
+  }
+
+  outKPIs.innerHTML = "";
+  const kpiTable = el("table", { style: { width:"100%", borderCollapse:"collapse", fontSize:"12px" } });
+  const thead = el("thead");
+  thead.appendChild(el("tr", {}, [
+    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, ["Métrica"]),
+    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, [`A: ${nameA}`]),
+    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, [`B: ${nameB}`]),
+    el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", background:"#fff" } }, ["Δ (B−A)"]),
+  ]));
+  kpiTable.appendChild(thead);
+
+  const tbody = el("tbody");
+  for (const r of rows) {
+    const d = delta(r.a, r.b);
+    tbody.appendChild(el("tr", {}, [
+      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px", fontWeight:"600" } }, [r.k]),
+      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [r.a === null ? "N/D" : r.fmt(r.a)]),
+      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [r.b === null ? "N/D" : r.fmt(r.b)]),
+      el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [d === null ? "N/D" : r.dFmt(d)]),
+    ]));
+  }
+  kpiTable.appendChild(tbody);
+
+  outKPIs.appendChild(el("div", { class: "note", style:{ marginBottom:"8px" } }, [
+    "Convención: Δ = B − A. Positivo favorece a B (según la métrica)."
+  ]));
+  outKPIs.appendChild(el("div", { style:{ border:"1px solid #ddd", borderRadius:"10px", overflow:"hidden" } }, [kpiTable]));
+
+  // ------- Tabla mensual: Δ por mes (B - A) -------
+  outTable.innerHTML = "";
+
+  // Definimos columnas clave (podés sumar/quitar)
+  const cols = [
+    "Mes",
+    "Ingresos",
+    "Opex_total",
+    "EBITDA",
+    "Impuestos",
+    "ΔWC",
+    "CapEx",
+    "FCFF_mes",
+    "Servicio_deuda",
+    "DSCR",
+    "FCFE_mes",
+  ];
+
+  const dfA = Array.isArray(resA.df) ? resA.df : [];
+  const dfB = Array.isArray(resB.df) ? resB.df : [];
+  const n = Math.min(dfA.length, dfB.length);
+
+  if (n === 0) {
+    outTable.appendChild(el("div", { style:{ padding:"12px" } }, ["Sin datos para comparar."]));
+    return;
+  }
+
+  const t = el("table", { style: { width:"100%", borderCollapse:"collapse", fontSize:"12px" } });
+  const th = el("thead");
+  const trh = el("tr");
+  for (const c of cols) {
+    trh.appendChild(el("th", { style:{ borderBottom:"1px solid #ddd", padding:"8px", position:"sticky", top:"0", background:"#fff" } }, [c]));
+  }
+  th.appendChild(trh);
+  t.appendChild(th);
+
+  const tb = el("tbody");
+  for (let i = 0; i < n; i++) {
+    const ra = dfA[i] || {};
+    const rb = dfB[i] || {};
+    const tr = el("tr");
+
+    for (const c of cols) {
+      let v;
+      if (c === "Mes") {
+        v = rb.Mes ?? ra.Mes ?? (i + 1);
+        tr.appendChild(el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [String(v)]));
+        continue;
+      }
+
+      const aVal = Number(ra[c]);
+      const bVal = Number(rb[c]);
+      if (isFiniteNum(aVal) && isFiniteNum(bVal)) v = bVal - aVal;
+      else v = NaN;
+
+      let txt = "N/D";
+      if (isFiniteNum(v)) txt = (v >= 0 ? "+" : "") + v.toFixed(2);
+
+      tr.appendChild(el("td", { style:{ borderBottom:"1px solid #f0f0f0", padding:"6px 8px" } }, [txt]));
+    }
+
+    tb.appendChild(tr);
+  }
+  t.appendChild(tb);
+
+  outTable.appendChild(el("div", { class: "note", style:{ margin:"8px 0" } }, [
+    "Tabla: Δ mensual = (B − A) por columna."
+  ]));
+  outTable.appendChild(t);
+}
+
+/* =========================================================
+   Hook: llamalo desde wire() luego de refreshScenarioList()
+
+   - fillCompareSelectors();
+   - byId("btnCompare").addEventListener("click", compareScenarios);
+
+   Y cada vez que guardás/eliminás escenario:
+   - fillCompareSelectors(keepA, keepB)
+========================================================= */
+
 
 /* --------------------------
    13) Wire up (COMPLETO y robusto)
