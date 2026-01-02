@@ -769,11 +769,13 @@ function deleteScenario() {
 }
 
 function newScenario() {
-  writeStateToUI(deepClone(DEFAULT_STATE));
-  byId("scName").value = "";
+  writeStateToUI(deepClone(BLANK_STATE));
+  const sc = byId("scName");
+  if (sc) sc.value = "";
   renderWaccCaption(readStateFromUI());
   renderMessages([], []);
 }
+
 
 /* --------------------------
    11) JSON Import/Export
