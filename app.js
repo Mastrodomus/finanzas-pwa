@@ -31,36 +31,58 @@
    Nota: si querés “Resonador” como default, cambiá acá.
 ---------------------------*/
 const DEFAULT_STATE = {
-  project: { name: "Proyecto", start_yyyymm: "2026-01", horizon_months: 0 , tax_rate: 0.00 },
+  project: {
+    name: "",
+    start_yyyymm: "",
+    horizon_months: 0,
+    tax_rate: 0,
+  },
   rev: {
-    volume_0: 0.0,
-    volume_growth_m: 0.00,
-    capacity_max: 0.0,
-    collection_factor: 0.00,
-    price_0: 0.0,
-    price_growth_m: 0.00,
+    volume_0: 0,
+    volume_growth_m: 0,
+    capacity_max: 0,
+    collection_factor: 0,
+    price_0: 0,
+    price_growth_m: 0,
   },
   cost: {
-    fixed_0: 0.0,
-    fixed_growth_m: 0.00,
-    var_unit_0: 0.0,
-    var_unit_growth_m: 0.00,
-    maintenance_0: 0.0,
-    maintenance_growth_m: 0.00,
+    fixed_0: 0,
+    fixed_growth_m: 0,
+    var_unit_0: 0,
+    var_unit_growth_m: 0,
+    maintenance_0: 0,
+    maintenance_growth_m: 0,
   },
-  wc: { enabled: true, dso: 0, dpo: 0, dio: 0, ap_fixed_share: 0.00 },
-  wacc: { e_pct: 0.00, d_pct: 0.00, rf: 0.00, mrp: 0.00, beta: 0.00, spread: 0.00, tax_rate: 0.00 },
-  capex: [{ month_index: 0, item: "Inversión inicial", amount: 0.0 }],
+  wc: {
+    enabled: false,
+    dso: 0,
+    dpo: 0,
+    dio: 0,
+    ap_fixed_share: 0,
+  },
+  wacc: {
+    e_pct: 0,
+    d_pct: 0,
+    rf: 0,
+    mrp: 0,
+    beta: 0,
+    spread: 0,
+    tax_rate: 0,
+  },
+  capex: [
+    { month_index: 0, item: "", amount: 0 }
+  ],
   fin: {
     enabled: false,
-    debt_amount_0: 0.0,
-    interest_rate_annual: 0.00,
+    debt_amount_0: 0,
+    interest_rate_annual: 0,
     term_months: 0,
     grace_months: 0,
     amortization_type: "french",
     tax_shield_enabled: false,
   },
 };
+
 
 /* --------------------------
    2) Storage (escenarios)
