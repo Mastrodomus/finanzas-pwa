@@ -317,12 +317,6 @@ function buildInputsView(host) {
   host.appendChild(secFin);
 }
 
-// ---- Comparación de escenarios ----
-const compBox = section("Comparación de escenarios", [
-  ...
-]);
-
-
 
 function buildResultsView(host) {
   const kpiGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" } });
