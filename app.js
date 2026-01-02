@@ -614,50 +614,56 @@ function validateInputs(S) {
   const errors = [];
   const warns = [];
 
-  if (S.project.horizon_months < 12) warns.push("Horizonte < 12 meses: resultados pueden ser poco representativos.");
-  if (!(S.project.tax_rate >= 0 && S.project.tax_rate <= 0.6)) errors.push("Impuesto fuera de rango (0..0.6).");
+  const n = Number(S?.project?.horizon_months ?? 0);
+  if (!Number.isFinite(n) || n <= 0) errors.push("Horizonte debe ser > 0.");
+  if (n > 240) warns.push("Horizonte > 240 meses: revisá si es intencional.");
 
-  if (!(S.rev.capacity_max > 0)) errors.push("Capacidad máxima debe ser > 0.");
-  if (!(S.rev.collection_factor >= 0 && S.rev.collection_factor <= 1)) errors.push("Factor cobranza debe estar entre 0 y 1.");
+  const tax = Number(S?.project?.tax_rate ?? 0);
+  if (!Number.isFinite(tax) || tax < 0 || tax > 0.6) errors.push("Impuesto fuera de rango (0..0.6).");
 
-  if (S.wc.enabled) {
-    if (S.wc.dso < 0 || S.wc.dpo < 0 || S.wc.dio < 0) errors.push("DSO/DPO/DIO no pueden ser negativos.");
-    if (!(S.wc.ap_fixed_share >= 0 && S.wc.ap_fixed_share <= 1)) errors.push("% fijos elegibles en AP debe estar 0..1.");
+  const capMax = Number(S?.rev?.capacity_max ?? 0);
+  if (!Number.isFinite(capMax) || capMax <= 0) errors.push("Capacidad máxima debe ser > 0.");
+
+  const coll = Number(S?.rev?.collection_factor ?? 0);
+  if (!Number.isFinite(coll) || coll < 0 || coll > 1) errors.push("Factor de cobranza debe estar entre 0 y 1.");
+
+  // Si todo está en cero, avisá (no bloquea si querés permitirlo)
+  const someSignal =
+    (Number(S?.rev?.volume_0 ?? 0) !== 0) ||
+    (Number(S?.rev?.price_0 ?? 0) !== 0) ||
+    (Number(S?.capex?.[0]?.amount ?? 0) !== 0);
+  if (!someSignal) warns.push("Todo está en 0: el modelo va a dar 0 (útil para armar base, pero no dice nada).");
+
+  // WC
+  if (S?.wc?.enabled) {
+    const dso = Number(S.wc.dso), dpo = Number(S.wc.dpo), dio = Number(S.wc.dio);
+    if (![dso, dpo, dio].every(Number.isFinite)) errors.push("DSO/DPO/DIO deben ser numéricos.");
+    if (dso < 0 || dpo < 0 || dio < 0) errors.push("DSO/DPO/DIO no pueden ser negativos.");
+    const apShare = Number(S.wc.ap_fixed_share);
+    if (!Number.isFinite(apShare) || apShare < 0 || apShare > 1) errors.push("% fijos elegibles AP debe ser 0..1.");
   }
 
-  if (Math.abs((S.wacc.e_pct + S.wacc.d_pct) - 1.0) > 1e-6) warns.push("E% + D% no suma 100% (se usa tal cual).");
-  if (S.wacc.tax_rate < 0 || S.wacc.tax_rate > 0.6) warns.push("Tasa impuesto WACC fuera de rango típico (0..0.6).");
+  // WACC
+  const ePct = Number(S?.wacc?.e_pct ?? 0), dPct = Number(S?.wacc?.d_pct ?? 0);
+  if (![ePct, dPct].every(Number.isFinite)) errors.push("E% y D% deben ser numéricos.");
+  if (ePct < 0 || ePct > 1 || dPct < 0 || dPct > 1) errors.push("E% y D% deben estar entre 0 y 1.");
+  if (Math.abs((ePct + dPct) - 1) > 1e-6) warns.push("E% + D% no suma 100% (se usa tal cual).");
 
-  if (S.fin.enabled) {
-    if (S.fin.debt_amount_0 < 0) errors.push("Deuda inicial no puede ser negativa.");
-    if (S.fin.interest_rate_annual < 0) errors.push("Tasa deuda no puede ser negativa.");
-    if (S.fin.term_months < 1) errors.push("Plazo deuda debe ser >= 1.");
-    if (S.fin.grace_months < 0 || S.fin.grace_months > S.fin.term_months) errors.push("Gracia inválida.");
-    if (!["french", "german"].includes(S.fin.amortization_type)) errors.push("Sistema debe ser french/german.");
+  // Deuda
+  if (S?.fin?.enabled) {
+    const D0 = Number(S.fin.debt_amount_0);
+    const iA = Number(S.fin.interest_rate_annual);
+    const term = Number(S.fin.term_months);
+    const grace = Number(S.fin.grace_months);
+    if (![D0, iA, term, grace].every(Number.isFinite)) errors.push("Deuda: valores inválidos.");
+    if (D0 < 0) errors.push("Deuda inicial no puede ser negativa.");
+    if (iA < 0) errors.push("Tasa de deuda no puede ser negativa.");
+    if (term < 1) errors.push("Plazo de deuda debe ser >= 1.");
+    if (grace < 0 || grace > term) errors.push("Gracia debe estar entre 0 y el plazo.");
+    if (!["french", "german"].includes(String(S.fin.amortization_type))) errors.push("Sistema debe ser french/german.");
   }
 
   return { errors, warns };
-}
-
-function renderMessages(errors, warns) {
-  const box = byId("msgBox");
-  if (!box) return;
-  box.innerHTML = "";
-
-  if (errors.length) {
-    box.appendChild(
-      el("div", { style: { border: "1px solid #d00", padding: "10px", borderRadius: "10px", background: "#fff5f5", whiteSpace: "pre-wrap" } }, [
-        "Errores (bloqueantes):\n- " + errors.join("\n- "),
-      ])
-    );
-  }
-  if (warns.length) {
-    box.appendChild(
-      el("div", { style: { border: "1px solid #c08", padding: "10px", borderRadius: "10px", background: "#fff7ff", marginTop: "8px", whiteSpace: "pre-wrap" } }, [
-        "Advertencias:\n- " + warns.join("\n- "),
-      ])
-    );
-  }
 }
 
 /* --------------------------
