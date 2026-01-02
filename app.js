@@ -1,8 +1,8 @@
-// Registrar service worker
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js");
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/finanzas-pwa/sw.js");
+  });
 }
-
 const ing = document.getElementById("ing");
 const egr = document.getElementById("egr");
 const out = document.getElementById("out");
