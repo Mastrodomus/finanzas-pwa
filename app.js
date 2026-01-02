@@ -364,44 +364,26 @@ function buildResultsView(host) {
     el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
   ]);
 
-  host.appendChild(compBox);
-
 function buildCompareView(host) {
-  // selector base + multiselección
-  const baseSel = el("select", { id: "cmpBase", style: { minWidth: "260px" } });
-  const multi = el("select", { id: "cmpMulti", multiple: true, size: 8, style: { width: "100%", minHeight: "190px" } });
+  if (!host) return;
+  host.innerHTML = "";
 
-  const btnRun = el("button", { id: "btnRunCompare", type: "button" }, ["Comparar"]);
-  const btnPickAll = el("button", { id: "btnPickAll", type: "button" }, ["Seleccionar todos"]);
-  const btnPickNone = el("button", { id: "btnPickNone", type: "button" }, ["Limpiar selección"]);
-
-  const top = section("Comparación de escenarios", [
-    el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" } }, [
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["Escenario base (referencia)"]),
-        baseSel,
-        el("div", { style: { fontSize: "12px", opacity: "0.8", marginTop: "6px" } }, [
-          "Los deltas se calculan contra este escenario."
-        ]),
-      ]),
-      el("div", {}, [
-        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["Escenarios a comparar (multi)"]),
-        multi,
-      ]),
+  // --- UI (A vs B) ---
+  const compBox = section("Comparación de escenarios", [
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
+      el("span", { style: { fontWeight: "700" } }, ["A:"]),
+      el("select", { id: "cmpA", style: { width: "240px" } }),
+      el("span", { style: { fontWeight: "700" } }, ["B:"]),
+      el("select", { id: "cmpB", style: { width: "240px" } }),
+      el("button", { id: "btnCompare", type: "button" }, ["Comparar"]),
     ]),
-    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" } }, [
-      btnRun, btnPickAll, btnPickNone
-    ]),
+    el("div", { id: "cmpKPIs", style: { marginTop: "12px" } }),
+    el("div", { id: "cmpTable", style: { marginTop: "12px", maxHeight: "420px", overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } }),
   ]);
 
-  const out = section("Resultados de comparación", [
-    el("div", { id: "cmpMsg", style: { marginBottom: "10px" } }),
-    el("div", { id: "cmpTable", style: { overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } })
-  ]);
-
-  host.appendChild(top);
-  host.appendChild(out);
+  host.appendChild(compBox);
 }
+
 
 function buildJSONView(host) {
   const txt = el("textarea", { id: "jsonArea", style: { width: "100%", height: "260px", fontFamily: "ui-monospace, Consolas, monospace", fontSize: "12px" } });
