@@ -171,7 +171,6 @@ function ensureUI() {
 
   const viewInputs = el("div", { id: "view_inputs" });
   const viewResults = el("div", { id: "view_results", style: { display: "none" } });
-  const viewCompare = el("div", { id: "view_compare", style: { display: "none" } });
   const viewJSON = el("div", { id: "view_json", style: { display: "none" } });
 
   root.appendChild(topBar);
