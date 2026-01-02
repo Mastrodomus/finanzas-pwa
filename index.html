@@ -1,58 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Finanzas (offline)</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.json" />
+  <!-- (Opcional) íconos, si existen en tu repo -->
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <style>
+    /* Minimal: no estilos “raros” que rompan; app.js arma el UI */
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
 <body>
-  <h1>Finanzas (offline)</h1>
 
-  <h3>Inputs</h3>
+  <!-- Root opcional: si no existe, app.js lo crea igual -->
+  <div id="appRoot"></div>
 
-  <label>
-    Ingresos (anual):
-    <input id="ing" type="number">
-  </label><br><br>
-
-  <label>
-    Egresos (anual):
-    <input id="egr" type="number">
-  </label><br><br>
-
-  <label>
-    Inversión inicial (CapEx t=0):
-    <input id="capex0" type="number">
-  </label><br><br>
-
-  <label>
-    Años:
-    <input id="years" type="number" value="5">
-  </label><br><br>
-
-  <label>
-    Tasa descuento (%):
-    <input id="rate" type="number" value="25">
-  </label><br><br>
-
-  <button id="btn">Calcular</button>
-  <pre id="out"></pre>
-
-  <hr>
-
-  <h3>Escenarios</h3>
-
-  <label>
-    Nombre:
-    <input id="scName" type="text">
-  </label>
-  <button id="saveSc">Guardar</button>
-  <button id="newSc">Nuevo</button>
-
-  <br><br>
-
-  <label>
-    Cargar:
-    <select id="scList"></select>
-  </label>
-  <button id="loadSc">Cargar</button>
-  <button id="delSc">Eliminar</button>
-
-  <script src="app.js"></script>
-  <script src="engine.js"></script>
-<script src="app.js"></script>
+  <!-- IMPORTANTE: engine.js SIEMPRE antes que app.js -->
+  <script src="./engine.js"></script>
+  <script src="./app.js"></script>
 
 </body>
+</html>
