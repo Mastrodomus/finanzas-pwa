@@ -462,8 +462,7 @@ function readStateFromUI() {
   S.wacc.spread = readNum("spread", S.wacc.spread);
   S.wacc.tax_rate = readNum("wacc_tax_rate", S.wacc.tax_rate);
 
-  const cap0 = readNum("capex0_amount", S.capex[0].amount);
-  S.capex = [{ month_index: 0, item: "Inversión inicial", amount: cap0 }];
+  S.capex = readCapexFromTable();
 
   S.fin.enabled = readBool("fin_enabled", S.fin.enabled);
   S.fin.debt_amount_0 = readNum("debt_amount_0", S.fin.debt_amount_0);
