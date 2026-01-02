@@ -866,3 +866,70 @@ function wire() {
 }
 
 window.addEventListener("load", wire);
+
+function renderCapexTable(rows) {
+  const host = byId("capexTable");
+  if (!host) return;
+  host.innerHTML = "";
+
+  const data = Array.isArray(rows) && rows.length ? rows : deepClone(DEFAULT_STATE.capex);
+
+  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
+  const thead = el("thead");
+  thead.appendChild(el("tr", {}, [
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["month_index"]),
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["item"]),
+    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["amount"]),
+    el("th", { style: { borderBottom: "1px solid #ddd", padding: "6px" } }, [""]),
+  ]));
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  data.forEach((r, idx) => {
+    const mi = el("input", { type: "number", step: "1", value: String(r.month_index ?? 0), "data-capex": "mi" });
+    const it = el("input", { type: "text", value: String(r.item ?? ""), "data-capex": "item" });
+    const am = el("input", { type: "number", step: "any", value: String(r.amount ?? 0), "data-capex": "amt" });
+
+    const del = el("button", {
+      type: "button",
+      onclick: () => {
+        const current = readCapexFromTable();
+        current.splice(idx, 1);
+        renderCapexTable(current.length ? current : [{ month_index: 0, item: "Inversión inicial", amount: 0 }]);
+      }
+    }, ["Eliminar"]);
+
+    tbody.appendChild(el("tr", {}, [
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [mi]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [it]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [am]),
+      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [del]),
+    ]));
+  });
+
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function readCapexFromTable() {
+  const host = byId("capexTable");
+  if (!host) return deepClone(DEFAULT_STATE.capex);
+
+  const rows = [];
+  const trs = host.querySelectorAll("tbody tr");
+  trs.forEach((tr) => {
+    const mi = tr.querySelector('input[data-capex="mi"]');
+    const it = tr.querySelector('input[data-capex="item"]');
+    const am = tr.querySelector('input[data-capex="amt"]');
+
+    const month_index = Math.trunc(Number(mi?.value ?? 0));
+    const item = String(it?.value ?? "").trim() || "CapEx";
+    const amount = Number(am?.value ?? 0);
+
+    if (Number.isFinite(month_index) && Number.isFinite(amount)) {
+      rows.push({ month_index: Math.max(0, month_index), item, amount });
+    }
+  });
+
+  return rows.length ? rows : deepClone(DEFAULT_STATE.capex);
+}
