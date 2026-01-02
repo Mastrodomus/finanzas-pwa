@@ -189,12 +189,13 @@ function ensureUI() {
   buildCompareView(viewCompare);
   buildJSONView(viewJSON);
 
-  function activate(tab) {
-    viewInputs.style.display = tab === "inputs" ? "" : "none";
-    viewResults.style.display = tab === "results" ? "" : "none";
-    viewCompare.style.display = tab === "compare" ? "" : "none";
-    viewJSON.style.display = tab === "json" ? "" : "none";
-  }
+function activate(tab) {
+  viewInputs.style.display = tab === "inputs" ? "" : "none";
+  viewResults.style.display = tab === "results" ? "" : "none";
+  viewCompare.style.display = tab === "compare" ? "" : "none";
+  viewJSON.style.display = tab === "json" ? "" : "none";
+}
+
 
   byId("tabInputs").addEventListener("click", () => activate("inputs"));
   byId("tabResults").addEventListener("click", () => activate("results"));
