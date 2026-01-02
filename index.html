@@ -8,38 +8,212 @@
 
   <!-- PWA -->
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#0b1220">
 
   <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
-    .top { display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:12px; }
-    .title { font-size:20px; font-weight:800; }
-    .subtitle { font-size:12px; opacity:.8; }
-    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-    button { padding:8px 10px; border:1px solid #ccc; background:#fff; border-radius:8px; cursor:pointer; }
-    button:hover { background:#f6f6f6; }
-    input, select, textarea { padding:8px; border:1px solid #ccc; border-radius:8px; }
-    .msg { margin-bottom:12px; }
-    .card { border:1px solid #ddd; border-radius:10px; padding:12px; margin-bottom:12px; }
-    .card h3 { margin:0 0 10px 0; font-size:14px; }
-    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
-    label { display:grid; gap:6px; font-size:13px; }
-    label span { font-weight:600; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    .kpis { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
-    .kpi { border:1px solid #ddd; border-radius:10px; padding:12px; }
-    .kpi .k { font-size:12px; opacity:.8; margin-bottom:6px; }
-    .kpi .v { font-size:18px; font-weight:800; }
-    .tablebox { max-height:520px; overflow:auto; border:1px solid #ddd; border-radius:10px; }
-    table { width:100%; border-collapse:collapse; font-size:12px; }
-    th { position:sticky; top:0; background:#fff; border-bottom:1px solid #ddd; padding:8px; text-align:left; }
-    td { border-bottom:1px solid #f0f0f0; padding:6px 8px; white-space:nowrap; }
-    .hidden { display:none; }
-    .warn { border:1px solid #c08; background:#fff7ff; padding:10px; border-radius:10px; white-space:pre-wrap; }
-    .err  { border:1px solid #d00; background:#fff5f5; padding:10px; border-radius:10px; white-space:pre-wrap; }
-    .note { font-size:12px; opacity:.85; }
+    /* =========================
+       THEME (no rompe app.js)
+    ========================== */
+    :root{
+      color-scheme: dark;
+      --bg:#0b1220;
+      --panel:#0f1a2e;
+      --card:#111f36;
+      --text:#e7eefc;
+      --muted:#9fb0d0;
+      --line:#1d2c4a;
+      --brand:#6aa6ff;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --radius:14px;
+      --shadow:0 10px 28px rgba(0,0,0,.42);
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--font);
+      background:
+        radial-gradient(1200px 700px at 20% 10%, rgba(106,166,255,.18), transparent 60%),
+        radial-gradient(900px 600px at 90% 30%, rgba(52,211,153,.10), transparent 55%),
+        var(--bg);
+      color:var(--text);
+    }
+
+    /* Layout */
+    .wrap{max-width:1200px;margin:0 auto;padding:18px;}
+    .top{
+      position:sticky; top:12px; z-index:10;
+      display:flex; gap:12px; flex-wrap:wrap;
+      align-items:center; justify-content:space-between;
+      margin-bottom:14px;
+      background:rgba(11,18,32,.72);
+      backdrop-filter:blur(10px);
+      border:1px solid rgba(29,44,74,.55);
+      border-radius:var(--radius);
+      padding:14px 14px;
+      box-shadow:var(--shadow);
+    }
+    .title{font-size:14px;font-weight:900;letter-spacing:.35px;margin:0}
+    .subtitle{font-size:12px;color:var(--muted);margin-top:4px}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+    /* Buttons / inputs */
+    button{
+      padding:10px 12px;
+      border:1px solid rgba(29,44,74,.85);
+      background:rgba(17,31,54,.75);
+      color:var(--text);
+      border-radius:12px;
+      cursor:pointer;
+      transition:transform .05s ease, background .2s ease, border-color .2s ease;
+      user-select:none;
+    }
+    button:hover{background:rgba(17,31,54,.95);border-color:rgba(106,166,255,.45)}
+    button:active{transform:translateY(1px)}
+    #btnCalc{
+      background:linear-gradient(135deg, rgba(106,166,255,.95), rgba(106,166,255,.55));
+      border-color:rgba(106,166,255,.65);
+      color:#08101f;
+      font-weight:900;
+    }
+    #btnReset{
+      border-color:rgba(251,113,133,.45);
+    }
+
+    input, select, textarea{
+      padding:10px 12px;
+      border:1px solid rgba(29,44,74,.85);
+      background:rgba(17,31,54,.55);
+      color:var(--text);
+      border-radius:12px;
+      outline:none;
+    }
+    input:focus, select:focus, textarea:focus{
+      border-color:rgba(106,166,255,.60);
+      box-shadow:0 0 0 3px rgba(106,166,255,.15);
+    }
+    select option{background:#0f1a2e;color:var(--text)}
+
+    /* Tabs */
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      margin-bottom:12px;
+    }
+    .tabs button{
+      padding:9px 11px;
+      font-weight:700;
+      color:var(--muted);
+      border-color:rgba(29,44,74,.75);
+    }
+    .tabs button.active{
+      color:#08101f;
+      background:linear-gradient(135deg, rgba(106,166,255,.95), rgba(106,166,255,.55));
+      border-color:rgba(106,166,255,.65);
+    }
+
+    /* Message box */
+    .msg{margin-bottom:12px}
+    .warn, .err{
+      border-radius:14px;
+      padding:10px 12px;
+      white-space:pre-wrap;
+      box-shadow:0 6px 16px rgba(0,0,0,.22);
+    }
+    .warn{border:1px solid rgba(251,191,36,.45); background:rgba(251,191,36,.08)}
+    .err {border:1px solid rgba(251,113,133,.45); background:rgba(251,113,133,.08)}
+    .note{font-size:12px;color:var(--muted)}
+
+    /* Cards / grids */
+    .card{
+      border:1px solid rgba(29,44,74,.60);
+      background:rgba(15,26,46,.65);
+      border-radius:var(--radius);
+      padding:14px;
+      margin-bottom:12px;
+      box-shadow:var(--shadow);
+    }
+    .card h3{
+      margin:0 0 10px 0;
+      font-size:13px;
+      letter-spacing:.35px;
+      color:var(--muted);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+      gap:10px;
+    }
+    label{display:grid;gap:6px;font-size:13px}
+    label span{font-weight:800;color:var(--muted)}
+
+    /* KPIs */
+    .kpis{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(190px, 1fr));
+      gap:10px;
+    }
+    .kpi{
+      border:1px solid rgba(29,44,74,.65);
+      background:rgba(17,31,54,.55);
+      border-radius:14px;
+      padding:12px;
+    }
+    .kpi .k{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .kpi .v{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+
+    /* Table */
+    .tablebox{
+      max-height:520px;
+      overflow:auto;
+      border:1px solid rgba(29,44,74,.65);
+      border-radius:14px;
+      background:rgba(15,26,46,.55);
+    }
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{
+      position:sticky; top:0;
+      background:rgba(15,26,46,.95);
+      border-bottom:1px solid rgba(29,44,74,.7);
+      padding:10px;
+      text-align:left;
+      color:var(--muted);
+    }
+    td{
+      border-bottom:1px solid rgba(29,44,74,.35);
+      padding:8px 10px;
+      white-space:nowrap;
+      font-variant-numeric:tabular-nums;
+    }
+    tr:nth-child(2n) td{background:rgba(17,31,54,.18)}
+
+    .hidden{display:none}
+
+    /* Compare boxes */
+    #cmpTable{
+      border:1px solid rgba(29,44,74,.65) !important;
+      border-radius:14px !important;
+      background:rgba(15,26,46,.55);
+    }
+
+    /* Small helpers */
+    .badge{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(29,44,74,.7);
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+    }
   </style>
 </head>
 
@@ -57,7 +231,7 @@
     </div>
 
     <div class="tabs">
-      <button id="tabInputs" type="button" data-tab="inputs">Inputs</button>
+      <button id="tabInputs" type="button" data-tab="inputs" class="active">Inputs</button>
       <button id="tabResults" type="button" data-tab="results">Resultados</button>
       <button id="tabCompare" type="button" data-tab="compare">Comparación</button>
       <button id="tabJSON" type="button" data-tab="json">JSON</button>
@@ -69,14 +243,14 @@
     <div id="view_inputs">
       <!-- Escenarios -->
       <div class="card">
-        <h3>Escenarios</h3>
+        <h3><span>Escenarios</span><span class="badge">Guardar / Cargar</span></h3>
         <div class="row">
-          <span style="font-weight:700;">Nombre:</span>
+          <span style="font-weight:800;color:var(--muted);">Nombre:</span>
           <input id="scName" type="text" placeholder="Ej: Base enero" style="width:220px" />
           <button id="btnSaveSc" type="button">Guardar</button>
           <button id="btnNewSc" type="button">Nuevo</button>
 
-          <span style="margin-left:8px;font-weight:700;">Cargar:</span>
+          <span style="margin-left:8px;font-weight:800;color:var(--muted);">Cargar:</span>
           <select id="scList" style="width:240px"></select>
           <button id="btnLoadSc" type="button">Cargar</button>
           <button id="btnDelSc" type="button">Eliminar</button>
@@ -84,7 +258,7 @@
       </div>
 
       <div class="card">
-        <h3>1) Proyecto</h3>
+        <h3><span>1) Proyecto</span><span class="badge">Base</span></h3>
         <div class="grid">
           <label><span>Nombre</span><input id="project_name" name="project_name" type="text"></label>
           <label><span>Inicio (YYYY-MM)</span><input id="start_yyyymm" name="start_yyyymm" type="text"></label>
@@ -94,7 +268,7 @@
       </div>
 
       <div class="card">
-        <h3>2) Ingresos</h3>
+        <h3><span>2) Ingresos</span><span class="badge">Top-line</span></h3>
         <div class="grid">
           <label><span>Volumen inicial (mes)</span><input id="volume_0" name="volume_0" type="number" step="1"></label>
           <label><span>Crec. volumen mensual</span><input id="volume_growth_m" name="volume_growth_m" type="number" step="0.0001"></label>
@@ -106,7 +280,7 @@
       </div>
 
       <div class="card">
-        <h3>3) Costos</h3>
+        <h3><span>3) Costos</span><span class="badge">Opex</span></h3>
         <div class="grid">
           <label><span>Fijos iniciales (USD/mes)</span><input id="fixed_0" name="fixed_0" type="number" step="1"></label>
           <label><span>Ajuste fijos mensual</span><input id="fixed_growth_m" name="fixed_growth_m" type="number" step="0.0001"></label>
@@ -118,11 +292,11 @@
       </div>
 
       <div class="card">
-        <h3>4) Capital de trabajo (DSO/DPO/DIO)</h3>
+        <h3><span>4) Capital de trabajo (DSO/DPO/DIO)</span><span class="badge">WC</span></h3>
         <div class="row" style="margin-bottom:8px;">
           <label style="display:flex;gap:8px;align-items:center;">
             <input id="wc_enabled" name="wc_enabled" type="checkbox">
-            <span>Habilitar WC</span>
+            <span style="font-weight:800;color:var(--muted);">Habilitar WC</span>
           </label>
         </div>
         <div class="grid">
@@ -134,7 +308,7 @@
       </div>
 
       <div class="card">
-        <h3>5) WACC (manual)</h3>
+        <h3><span>5) WACC (manual)</span><span class="badge">Costo de capital</span></h3>
         <div class="grid">
           <label><span>E% (0..1)</span><input id="e_pct" name="e_pct" type="number" step="0.01"></label>
           <label><span>D% (0..1)</span><input id="d_pct" name="d_pct" type="number" step="0.01"></label>
@@ -148,7 +322,7 @@
       </div>
 
       <div class="card">
-        <h3>6) CapEx</h3>
+        <h3><span>6) CapEx</span><span class="badge">Inversión</span></h3>
         <div class="grid">
           <label><span>CapEx mes 0 (USD)</span><input id="capex0_amount" name="capex0_amount" type="number" step="1"></label>
         </div>
@@ -156,11 +330,11 @@
       </div>
 
       <div class="card">
-        <h3>7) Financiamiento (opcional)</h3>
+        <h3><span>7) Financiamiento (opcional)</span><span class="badge">Deuda</span></h3>
         <div class="row" style="margin-bottom:8px;">
           <label style="display:flex;gap:8px;align-items:center;">
             <input id="fin_enabled" name="fin_enabled" type="checkbox">
-            <span>Usar deuda</span>
+            <span style="font-weight:800;color:var(--muted);">Usar deuda</span>
           </label>
         </div>
         <div class="grid">
@@ -179,7 +353,7 @@
         <div class="row" style="margin-top:8px;">
           <label style="display:flex;gap:8px;align-items:center;">
             <input id="tax_shield_enabled" name="tax_shield_enabled" type="checkbox">
-            <span>Escudo fiscal (interés)</span>
+            <span style="font-weight:800;color:var(--muted);">Escudo fiscal (interés)</span>
           </label>
         </div>
       </div>
@@ -187,45 +361,49 @@
 
     <!-- RESULTS -->
     <div id="view_results" class="hidden">
-      <div class="kpis">
-        <div class="kpi"><div class="k">VAN (USD)</div><div class="v" id="r_van">–</div></div>
-        <div class="kpi"><div class="k">TIR mensual</div><div class="v" id="r_tir_m">–</div></div>
-        <div class="kpi"><div class="k">TIR anual eq.</div><div class="v" id="r_tir_a">–</div></div>
-        <div class="kpi"><div class="k">WACC anual</div><div class="v" id="r_wacc_a">–</div></div>
-        <div class="kpi"><div class="k">WACC mensual</div><div class="v" id="r_wacc_m">–</div></div>
-        <div class="kpi"><div class="k">Payback (mes)</div><div class="v" id="r_pb">–</div></div>
-        <div class="kpi"><div class="k">Payback desc. (mes)</div><div class="v" id="r_dpb">–</div></div>
-      </div>
+      <div class="card">
+        <h3><span>KPIs</span><span class="badge">Resultados</span></h3>
 
-      <div class="kpis" style="margin-top:10px;grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-        <div class="kpi"><div class="k">TIR Equity anual eq.</div><div class="v" id="r_irr_e_a">–</div></div>
-        <div class="kpi"><div class="k">DSCR mínimo</div><div class="v" id="r_dscr_min">–</div></div>
-        <div class="kpi"><div class="k">Buffer requerido (USD)</div><div class="v" id="r_buffer">–</div></div>
-        <div class="kpi"><div class="k">FCFE acumulado final</div><div class="v" id="r_fcfe_sum">–</div></div>
-      </div>
+        <div class="kpis">
+          <div class="kpi"><div class="k">VAN (USD)</div><div class="v" id="r_van">–</div></div>
+          <div class="kpi"><div class="k">TIR mensual</div><div class="v" id="r_tir_m">–</div></div>
+          <div class="kpi"><div class="k">TIR anual eq.</div><div class="v" id="r_tir_a">–</div></div>
+          <div class="kpi"><div class="k">WACC anual</div><div class="v" id="r_wacc_a">–</div></div>
+          <div class="kpi"><div class="k">WACC mensual</div><div class="v" id="r_wacc_m">–</div></div>
+          <div class="kpi"><div class="k">Payback (mes)</div><div class="v" id="r_pb">–</div></div>
+          <div class="kpi"><div class="k">Payback desc. (mes)</div><div class="v" id="r_dpb">–</div></div>
+        </div>
 
-      <div id="alertsBox" style="margin-top:12px;"></div>
+        <div class="kpis" style="margin-top:10px;grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+          <div class="kpi"><div class="k">TIR Equity anual eq.</div><div class="v" id="r_irr_e_a">–</div></div>
+          <div class="kpi"><div class="k">DSCR mínimo</div><div class="v" id="r_dscr_min">–</div></div>
+          <div class="kpi"><div class="k">Buffer requerido (USD)</div><div class="v" id="r_buffer">–</div></div>
+          <div class="kpi"><div class="k">FCFE acumulado final</div><div class="v" id="r_fcfe_sum">–</div></div>
+        </div>
 
-      <div style="margin-top:12px;">
-        <div style="font-weight:700;margin-bottom:8px;">Tabla mensual</div>
-        <div id="table" class="tablebox"></div>
+        <div id="alertsBox" style="margin-top:12px;"></div>
+
+        <div style="margin-top:12px;">
+          <div style="font-weight:800;color:var(--muted);margin-bottom:8px;">Tabla mensual</div>
+          <div id="table" class="tablebox"></div>
+        </div>
       </div>
     </div>
 
     <!-- COMPARE -->
     <div id="view_compare" class="hidden">
       <div class="card">
-        <h3>Comparación de escenarios (A vs B)</h3>
+        <h3><span>Comparación de escenarios (A vs B)</span><span class="badge">Delta</span></h3>
         <div class="row">
-          <span style="font-weight:700;">A:</span>
+          <span style="font-weight:800;color:var(--muted);">A:</span>
           <select id="cmpA" name="cmpA" style="width:240px"></select>
-          <span style="font-weight:700;">B:</span>
+          <span style="font-weight:800;color:var(--muted);">B:</span>
           <select id="cmpB" name="cmpB" style="width:240px"></select>
           <button id="btnCompare" type="button">Comparar</button>
         </div>
 
         <div id="cmpKPIs" style="margin-top:12px;"></div>
-        <div id="cmpTable" style="margin-top:12px;max-height:420px;overflow:auto;border:1px solid #ddd;border-radius:10px;"></div>
+        <div id="cmpTable" style="margin-top:12px;max-height:420px;overflow:auto;"></div>
         <div class="note" style="margin-top:8px;">
           Tip: guardá al menos 2 escenarios para que aparezcan en los selects.
         </div>
@@ -235,12 +413,12 @@
     <!-- JSON -->
     <div id="view_json" class="hidden">
       <div class="card">
-        <h3>JSON del proyecto</h3>
+        <h3><span>JSON del proyecto</span><span class="badge">Export / Import</span></h3>
         <div class="row" style="margin-bottom:8px;">
           <button id="btnExportJSON" type="button">Generar JSON desde Inputs</button>
           <button id="btnImportJSON" type="button">Cargar JSON (pegar)</button>
           <button id="btnDownloadJSON" type="button">Descargar JSON</button>
-          <span style="margin-left:10px;font-weight:700;">Archivo:</span>
+          <span style="margin-left:10px;font-weight:800;color:var(--muted);">Archivo:</span>
           <input id="jsonFile" name="jsonFile" type="file" accept=".json" />
           <button id="btnLoadFileJSON" type="button">Cargar archivo JSON</button>
         </div>
@@ -256,7 +434,7 @@
   <script src="./app.js"></script>
 
   <script>
-    // Tabs mínimos (por si tu app.js no los toma aún)
+    // Tabs mínimos (no toca app.js)
     (function () {
       const views = {
         inputs: document.getElementById("view_inputs"),
@@ -264,14 +442,29 @@
         compare: document.getElementById("view_compare"),
         json: document.getElementById("view_json"),
       };
+
+      const tabButtons = {
+        inputs: document.getElementById("tabInputs"),
+        results: document.getElementById("tabResults"),
+        compare: document.getElementById("tabCompare"),
+        json: document.getElementById("tabJSON"),
+      };
+
+      function setActive(k){
+        Object.values(tabButtons).forEach(b => b.classList.remove("active"));
+        tabButtons[k].classList.add("active");
+      }
+
       function show(k) {
         Object.values(views).forEach(v => v.classList.add("hidden"));
         views[k].classList.remove("hidden");
+        setActive(k);
       }
-      document.getElementById("tabInputs").addEventListener("click", () => show("inputs"));
-      document.getElementById("tabResults").addEventListener("click", () => show("results"));
-      document.getElementById("tabCompare").addEventListener("click", () => show("compare"));
-      document.getElementById("tabJSON").addEventListener("click", () => show("json"));
+
+      tabButtons.inputs.addEventListener("click", () => show("inputs"));
+      tabButtons.results.addEventListener("click", () => show("results"));
+      tabButtons.compare.addEventListener("click", () => show("compare"));
+      tabButtons.json.addEventListener("click", () => show("json"));
       show("inputs");
     })();
   </script>
