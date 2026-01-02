@@ -29,30 +29,30 @@
 /* --------------------------
    1) Default state (shape Python)
 ---------------------------*/
-const DEFAULT_STATE = {
-  project: { name: "Resonador", start_yyyymm: "2026-01", horizon_months: 60, tax_rate: 0.30 },
+const BLANK_STATE = {
+  project: { name: "Proyecto", start_yyyymm: "2026-01", horizon_months: 60, tax_rate: 0.30 },
   rev: {
-    volume_0: 200.0,
-    volume_growth_m: 0.01,
-    capacity_max: 500.0,
-    collection_factor: 0.98,
-    price_0: 150.0,
-    price_growth_m: 0.008,
+    volume_0: 0,
+    volume_growth_m: 0,
+    capacity_max: 0,
+    collection_factor: 1,
+    price_0: 0,
+    price_growth_m: 0,
   },
   cost: {
-    fixed_0: 12000.0,
-    fixed_growth_m: 0.007,
-    var_unit_0: 25.0,
-    var_unit_growth_m: 0.007,
-    maintenance_0: 900.0,
-    maintenance_growth_m: 0.007,
+    fixed_0: 0,
+    fixed_growth_m: 0,
+    var_unit_0: 0,
+    var_unit_growth_m: 0,
+    maintenance_0: 0,
+    maintenance_growth_m: 0,
   },
-  wc: { enabled: true, dso: 90, dpo: 60, dio: 0, ap_fixed_share: 0.25 },
-  wacc: { e_pct: 0.60, d_pct: 0.40, rf: 0.045, mrp: 0.055, beta: 1.10, spread: 0.03, tax_rate: 0.30 },
-  capex: [{ month_index: 0, item: "Inversión inicial", amount: 730000.0 }],
+  wc: { enabled: false, dso: 0, dpo: 0, dio: 0, ap_fixed_share: 0.25 },
+  wacc: { e_pct: 0.60, d_pct: 0.40, rf: 0.045, mrp: 0.055, beta: 1.00, spread: 0.03, tax_rate: 0.30 },
+  capex: [{ month_index: 0, item: "Inversión inicial", amount: 0 }],
   fin: {
     enabled: false,
-    debt_amount_0: 0.0,
+    debt_amount_0: 0,
     interest_rate_annual: 0.18,
     term_months: 60,
     grace_months: 0,
