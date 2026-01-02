@@ -378,7 +378,6 @@ function buildResultsView(host) {
 function buildCompareView(host) {
   if (!host) return;
   host.innerHTML = "";
-host.appendChild(compBox);
    
   // --- UI (A vs B) ---
   const compBox = section("Comparación de escenarios", [
@@ -395,6 +394,24 @@ host.appendChild(compBox);
 
   host.appendChild(compBox);
 }
+  // --- Curvas comparadas (FCFF/FCFE acumulados) ---
+  const curvesBox = section("Curvas comparadas", [
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
+      el("button", { id: "btnDrawCurves", type: "button" }, ["Dibujar curvas"]),
+    ]),
+    el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "12px", marginTop: "10px" } }, [
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFF acumulado"]),
+        el("div", { id: "chartFCFF" }),
+      ]),
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["FCFE acumulado (Equity)"]),
+        el("div", { id: "chartFCFE" }),
+      ]),
+    ]),
+  ]);
+
+  host.appendChild(curvesBox);
 
 
 function buildJSONView(host) {
