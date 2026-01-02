@@ -378,7 +378,8 @@ function buildResultsView(host) {
 function buildCompareView(host) {
   if (!host) return;
   host.innerHTML = "";
-
+host.appendChild(compBox);
+   
   // --- UI (A vs B) ---
   const compBox = section("Comparación de escenarios", [
     el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
