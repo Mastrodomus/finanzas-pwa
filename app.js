@@ -134,19 +134,21 @@ function ensureUI() {
     ])
   ]);
 
-  const tabs = el("div", { style: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" } }, [
-    el("button", { id: "tabInputs", type: "button" }, ["Inputs"]),
-    el("button", { id: "tabResults", type: "button" }, ["Resultados"]),
-    el("button", { id: "tabCompare", type: "button" }, ["Comparación"]),
-    el("button", { id: "tabJSON", type: "button" }, ["JSON"]),
+  const tabs = el("div", {
+    style: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }
+  }, [
+    el("button", { id: "tabInputs", type: "button", "data-tab": "inputs" }, ["Inputs"]),
+    el("button", { id: "tabResults", type: "button", "data-tab": "results" }, ["Resultados"]),
+    el("button", { id: "tabCompare", type: "button", "data-tab": "compare" }, ["Comparación"]),
+    el("button", { id: "tabJSON", type: "button", "data-tab": "json" }, ["JSON"]),
   ]);
 
   const msg = el("div", { id: "msgBox", style: { marginBottom: "12px" } });
 
-  const viewInputs = el("div", { id: "view_inputs" });
+  const viewInputs  = el("div", { id: "view_inputs" });
   const viewResults = el("div", { id: "view_results", style: { display: "none" } });
- const viewCompare = el("div", { id: "view_compare", style: { display: "none" } });
-  const viewJSON = el("div", { id: "view_json", style: { display: "none" } });
+  const viewCompare = el("div", { id: "view_compare", style: { display: "none" } });
+  const viewJSON    = el("div", { id: "view_json", style: { display: "none" } });
 
   root.appendChild(topBar);
   root.appendChild(tabs);
@@ -164,17 +166,17 @@ function ensureUI() {
   buildJSONView(viewJSON);
 
   function activate(tab) {
-    viewInputs.style.display = tab === "inputs" ? "" : "none";
+    viewInputs.style.display  = tab === "inputs"  ? "" : "none";
     viewResults.style.display = tab === "results" ? "" : "none";
-    viewCompare.style.display = tab === "compare" ? "" : "none";el("button", { id:"tabCompare", type:"button", "data-tab":"compare" }, ["Comparar"])
-    viewJSON.style.display = tab === "json" ? "" : "none";
+    viewCompare.style.display = tab === "compare" ? "" : "none";
+    viewJSON.style.display    = tab === "json"    ? "" : "none";
   }
 
   byId("tabInputs").addEventListener("click", () => activate("inputs"));
   byId("tabResults").addEventListener("click", () => activate("results"));
   byId("tabCompare").addEventListener("click", () => {
     activate("compare");
-    refreshCompareUI(); // al abrir, sincroniza listas
+    if (typeof refreshCompareUI === "function") refreshCompareUI();
   });
   byId("tabJSON").addEventListener("click", () => activate("json"));
 
@@ -182,35 +184,6 @@ function ensureUI() {
   return root;
 }
 
-function section(title, children = []) {
-  return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" } }, [
-    el("div", { style: { fontWeight: "700", marginBottom: "8px" } }, [title]),
-    ...children
-  ]);
-}
-function grid(children = []) {
-  return el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" } }, children);
-}
-function field(label, id, type = "number", step = "any") {
-  return el("label", { style: { display: "grid", gap: "6px", fontSize: "13px" } }, [
-    el("span", { style: { fontWeight: "600" } }, [label]),
-    el("input", { id, type, step })
-  ]);
-}
-function checkbox(label, id) {
-  return el("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" } }, [
-    el("input", { id, type: "checkbox" }),
-    el("span", { style: { fontWeight: "600" } }, [label])
-  ]);
-}
-function selectField(label, id, options) {
-  const sel = el("select", { id });
-  for (const { value, text } of options) sel.appendChild(el("option", { value }, [text]));
-  return el("label", { style: { display: "grid", gap: "6px", fontSize: "13px" } }, [
-    el("span", { style: { fontWeight: "600" } }, [label]),
-    sel
-  ]);
-}
 
 /* --------------------------
    5) Views
