@@ -1,14 +1,12 @@
-/* app.js (completo, listo para copiar/pegar)
-   - UI completa (no depende de HTML previo)
-   - Lee/escribe estado S (shape igual a default_state() Python)
-   - KPIs + tabla mensual
-   - CapEx multi-mes (tabla dinámica)
-   - Escenarios (guardar/cargar/eliminar) en localStorage
-   - Import/Export JSON (textarea + archivo + descarga)
-   - Registro SW (PWA) si existe sw.js
-   Requiere en index.html:
-     <script src="./engine.js"></script>
-     <script src="./app.js"></script>
+/* app.js (v4) — incluye Comparación de escenarios
+   - Inputs / Resultados / Comparación / JSON
+   - Guarda/carga/elimina escenarios (localStorage)
+   - Compara múltiples escenarios (KPIs + deltas vs base)
+   - 100% offline, sin backend
+
+   Requisito en index.html:
+     <script src="engine.js"></script>
+     <script src="app.js"></script>
 */
 
 "use strict";
@@ -27,7 +25,7 @@
 })();
 
 /* --------------------------
-   1) Default state (idéntico a default_state() Python)
+   1) Default state (shape Python)
 ---------------------------*/
 const DEFAULT_STATE = {
   project: { name: "Resonador", start_yyyymm: "2026-01", horizon_months: 60, tax_rate: 0.30 },
@@ -64,8 +62,8 @@ const DEFAULT_STATE = {
 /* --------------------------
    2) Storage escenarios
 ---------------------------*/
-const INDEX_KEY = "finanzas.scenarios.index.v3";
-const DATA_PREFIX = "finanzas.scenario.v3.";
+const INDEX_KEY = "finanzas.scenarios.index.v4";
+const DATA_PREFIX = "finanzas.scenario.v4.";
 
 function getIndex() {
   try { return JSON.parse(localStorage.getItem(INDEX_KEY) || "[]"); }
@@ -92,6 +90,10 @@ function fmtPct(x) {
   if (!isFiniteNum(x)) return "N/D";
   return (x * 100).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
 }
+function fmtMaybeNumber(x, digits = 2) {
+  if (!isFiniteNum(x)) return "N/D";
+  return x.toFixed(digits);
+}
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -105,11 +107,10 @@ function el(tag, attrs = {}, children = []) {
   for (const c of children) node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
   return node;
 }
-
 function byId(id) { return document.getElementById(id); }
 
 /* --------------------------
-   4) UI: se crea completa (no depende de tu HTML)
+   4) UI base
 ---------------------------*/
 function ensureUI() {
   let root = byId("appRoot");
@@ -117,28 +118,15 @@ function ensureUI() {
 
   root = el("div", {
     id: "appRoot",
-    style: {
-      maxWidth: "1100px",
-      margin: "0 auto",
-      padding: "16px",
-      fontFamily: "system-ui, Segoe UI, Arial",
-      lineHeight: "1.3",
-    }
+    style: { maxWidth: "1100px", margin: "0 auto", padding: "16px", fontFamily: "system-ui, Segoe UI, Arial" }
   });
 
   const topBar = el("div", {
-    style: {
-      display: "flex",
-      gap: "12px",
-      flexWrap: "wrap",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: "12px"
-    }
+    style: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }
   }, [
     el("div", {}, [
       el("div", { style: { fontSize: "20px", fontWeight: "700" } }, ["Modelo de inversión (offline)"]),
-      el("div", { style: { fontSize: "12px", opacity: "0.8" } }, ["FCFF mensual nominal (USD) + WACC + (opcional) deuda/FCFE/DSCR/buffer"])
+      el("div", { style: { fontSize: "12px", opacity: "0.8" } }, ["FCFF + WACC + (opcional) deuda/FCFE/DSCR/buffer"])
     ]),
     el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } }, [
       el("button", { id: "btnCalc", type: "button" }, ["Calcular"]),
@@ -147,15 +135,17 @@ function ensureUI() {
   ]);
 
   const tabs = el("div", { style: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" } }, [
-    el("button", { id: "tabInputs", type: "button", "data-tab": "inputs" }, ["Inputs"]),
-    el("button", { id: "tabResults", type: "button", "data-tab": "results" }, ["Resultados"]),
-    el("button", { id: "tabJSON", type: "button", "data-tab": "json" }, ["JSON"]),
+    el("button", { id: "tabInputs", type: "button" }, ["Inputs"]),
+    el("button", { id: "tabResults", type: "button" }, ["Resultados"]),
+    el("button", { id: "tabCompare", type: "button" }, ["Comparación"]),
+    el("button", { id: "tabJSON", type: "button" }, ["JSON"]),
   ]);
 
   const msg = el("div", { id: "msgBox", style: { marginBottom: "12px" } });
 
   const viewInputs = el("div", { id: "view_inputs" });
   const viewResults = el("div", { id: "view_results", style: { display: "none" } });
+  const viewCompare = el("div", { id: "view_compare", style: { display: "none" } });
   const viewJSON = el("div", { id: "view_json", style: { display: "none" } });
 
   root.appendChild(topBar);
@@ -163,21 +153,29 @@ function ensureUI() {
   root.appendChild(msg);
   root.appendChild(viewInputs);
   root.appendChild(viewResults);
+  root.appendChild(viewCompare);
   root.appendChild(viewJSON);
 
   document.body.appendChild(root);
 
   buildInputsView(viewInputs);
   buildResultsView(viewResults);
+  buildCompareView(viewCompare);
   buildJSONView(viewJSON);
 
   function activate(tab) {
     viewInputs.style.display = tab === "inputs" ? "" : "none";
     viewResults.style.display = tab === "results" ? "" : "none";
+    viewCompare.style.display = tab === "compare" ? "" : "none";
     viewJSON.style.display = tab === "json" ? "" : "none";
   }
+
   byId("tabInputs").addEventListener("click", () => activate("inputs"));
   byId("tabResults").addEventListener("click", () => activate("results"));
+  byId("tabCompare").addEventListener("click", () => {
+    activate("compare");
+    refreshCompareUI(); // al abrir, sincroniza listas
+  });
   byId("tabJSON").addEventListener("click", () => activate("json"));
 
   activate("inputs");
@@ -185,34 +183,26 @@ function ensureUI() {
 }
 
 function section(title, children = []) {
-  return el("div", {
-    style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" }
-  }, [
+  return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px", marginBottom: "12px" } }, [
     el("div", { style: { fontWeight: "700", marginBottom: "8px" } }, [title]),
     ...children
   ]);
 }
-
 function grid(children = []) {
-  return el("div", {
-    style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }
-  }, children);
+  return el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" } }, children);
 }
-
 function field(label, id, type = "number", step = "any") {
   return el("label", { style: { display: "grid", gap: "6px", fontSize: "13px" } }, [
     el("span", { style: { fontWeight: "600" } }, [label]),
     el("input", { id, type, step })
   ]);
 }
-
 function checkbox(label, id) {
   return el("label", { style: { display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" } }, [
     el("input", { id, type: "checkbox" }),
     el("span", { style: { fontWeight: "600" } }, [label])
   ]);
 }
-
 function selectField(label, id, options) {
   const sel = el("select", { id });
   for (const { value, text } of options) sel.appendChild(el("option", { value }, [text]));
@@ -223,81 +213,10 @@ function selectField(label, id, options) {
 }
 
 /* --------------------------
-   5) CapEx table helpers
----------------------------*/
-function renderCapexTable(rows) {
-  const host = byId("capexTable");
-  if (!host) return;
-  host.innerHTML = "";
-
-  const data = Array.isArray(rows) && rows.length ? rows : deepClone(DEFAULT_STATE.capex);
-
-  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
-  const thead = el("thead");
-  thead.appendChild(el("tr", {}, [
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["month_index"]),
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["item"]),
-    el("th", { style: { textAlign: "left", borderBottom: "1px solid #ddd", padding: "6px" } }, ["amount"]),
-    el("th", { style: { borderBottom: "1px solid #ddd", padding: "6px" } }, [""]),
-  ]));
-  table.appendChild(thead);
-
-  const tbody = el("tbody");
-  data.forEach((r, idx) => {
-    const mi = el("input", { type: "number", step: "1", value: String(r.month_index ?? 0), "data-capex": "mi" });
-    const it = el("input", { type: "text", value: String(r.item ?? ""), "data-capex": "item" });
-    const am = el("input", { type: "number", step: "any", value: String(r.amount ?? 0), "data-capex": "amt" });
-
-    const del = el("button", {
-      type: "button",
-      onclick: () => {
-        const current = readCapexFromTable();
-        current.splice(idx, 1);
-        renderCapexTable(current.length ? current : [{ month_index: 0, item: "Inversión inicial", amount: 0 }]);
-      }
-    }, ["Eliminar"]);
-
-    tbody.appendChild(el("tr", {}, [
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [mi]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [it]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [am]),
-      el("td", { style: { borderBottom: "1px solid #f0f0f0", padding: "6px" } }, [del]),
-    ]));
-  });
-
-  table.appendChild(tbody);
-  host.appendChild(table);
-}
-
-function readCapexFromTable() {
-  const host = byId("capexTable");
-  if (!host) return deepClone(DEFAULT_STATE.capex);
-
-  const rows = [];
-  const trs = host.querySelectorAll("tbody tr");
-  trs.forEach((tr) => {
-    const mi = tr.querySelector('input[data-capex="mi"]');
-    const it = tr.querySelector('input[data-capex="item"]');
-    const am = tr.querySelector('input[data-capex="amt"]');
-
-    const month_index = Math.trunc(Number(mi?.value ?? 0));
-    const item = String(it?.value ?? "").trim() || "CapEx";
-    const amount = Number(am?.value ?? 0);
-
-    if (Number.isFinite(month_index) && Number.isFinite(amount)) {
-      rows.push({ month_index: Math.max(0, month_index), item, amount });
-    }
-  });
-
-  return rows.length ? rows : deepClone(DEFAULT_STATE.capex);
-}
-
-/* --------------------------
-   6) Build views
+   5) Views
 ---------------------------*/
 function buildInputsView(host) {
-  // Escenarios
-  const scName = el("input", { id: "scName", type: "text", placeholder: "Ej: Base enero", style: { width: "220px" } });
+  const scName = el("input", { id: "scName", type: "text", placeholder: "Ej: Base", style: { width: "220px" } });
   const scList = el("select", { id: "scList", style: { width: "240px" } });
 
   const scRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } }, [
@@ -311,7 +230,6 @@ function buildInputsView(host) {
     el("button", { id: "btnDelSc", type: "button" }, ["Eliminar"]),
   ]);
 
-  // Proyecto
   const secProject = section("1) Proyecto", [
     grid([
       field("Nombre", "project_name", "text"),
@@ -321,7 +239,6 @@ function buildInputsView(host) {
     ])
   ]);
 
-  // Ingresos
   const secRev = section("2) Ingresos", [
     grid([
       field("Volumen inicial (mes)", "volume_0", "number", "1"),
@@ -333,7 +250,6 @@ function buildInputsView(host) {
     ])
   ]);
 
-  // Costos
   const secCost = section("3) Costos", [
     grid([
       field("Fijos iniciales (USD/mes)", "fixed_0", "number", "1"),
@@ -345,7 +261,6 @@ function buildInputsView(host) {
     ])
   ]);
 
-  // WC
   const secWC = section("4) Capital de trabajo (DSO/DPO/DIO)", [
     el("div", { style: { marginBottom: "8px" } }, [ checkbox("Habilitar WC", "wc_enabled") ]),
     grid([
@@ -356,7 +271,6 @@ function buildInputsView(host) {
     ])
   ]);
 
-  // WACC
   const secWACC = section("5) WACC (manual)", [
     grid([
       field("E% (0..1)", "e_pct", "number", "0.01"),
@@ -370,21 +284,13 @@ function buildInputsView(host) {
     el("div", { id: "waccCaption", style: { marginTop: "8px", fontSize: "12px", opacity: "0.85" } }, [""])
   ]);
 
-  // CapEx multi-mes
-  const capexTable = el("div", { id: "capexTable" });
-  const capexBtnRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" } }, [
-    el("button", { id: "btnCapexAdd", type: "button" }, ["+ Fila"]),
-    el("button", { id: "btnCapexClear", type: "button" }, ["Reset CapEx"]),
-  ]);
-  const secCapex = section("6) CapEx (multi-mes)", [
-    el("div", { style: { fontSize: "12px", opacity: "0.85", marginBottom: "8px" } }, [
-      "month_index: 0 = mes inicial. Podés cargar múltiples inversiones o reintegros (monto negativo)."
-    ]),
-    capexTable,
-    capexBtnRow
+  const secCapex = section("6) CapEx", [
+    grid([ field("CapEx mes 0 (USD)", "capex0_amount", "number", "1") ]),
+    el("div", { style: { fontSize: "12px", opacity: "0.85", marginTop: "6px" } }, [
+      "Nota: por ahora editás CapEx del mes 0. Si querés tabla multi-mes (igual que Streamlit), se agrega en el siguiente sprint."
+    ])
   ]);
 
-  // Deuda
   const secFin = section("7) Financiamiento (opcional)", [
     el("div", { style: { marginBottom: "8px" } }, [ checkbox("Usar deuda", "fin_enabled") ]),
     grid([
@@ -413,14 +319,12 @@ function buildInputsView(host) {
 
 function buildResultsView(host) {
   const kpiGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" } });
-
   function kpiCard(title, id) {
     return el("div", { style: { border: "1px solid #ddd", borderRadius: "10px", padding: "12px" } }, [
       el("div", { style: { fontSize: "12px", opacity: "0.8", marginBottom: "6px" } }, [title]),
       el("div", { id, style: { fontSize: "18px", fontWeight: "800" } }, ["–"]),
     ]);
   }
-
   kpiGrid.appendChild(kpiCard("VAN (USD)", "r_van"));
   kpiGrid.appendChild(kpiCard("TIR mensual", "r_tir_m"));
   kpiGrid.appendChild(kpiCard("TIR anual eq.", "r_tir_a"));
@@ -448,6 +352,43 @@ function buildResultsView(host) {
   host.appendChild(tableHost);
 }
 
+function buildCompareView(host) {
+  // selector base + multiselección
+  const baseSel = el("select", { id: "cmpBase", style: { minWidth: "260px" } });
+  const multi = el("select", { id: "cmpMulti", multiple: true, size: 8, style: { width: "100%", minHeight: "190px" } });
+
+  const btnRun = el("button", { id: "btnRunCompare", type: "button" }, ["Comparar"]);
+  const btnPickAll = el("button", { id: "btnPickAll", type: "button" }, ["Seleccionar todos"]);
+  const btnPickNone = el("button", { id: "btnPickNone", type: "button" }, ["Limpiar selección"]);
+
+  const top = section("Comparación de escenarios", [
+    el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" } }, [
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["Escenario base (referencia)"]),
+        baseSel,
+        el("div", { style: { fontSize: "12px", opacity: "0.8", marginTop: "6px" } }, [
+          "Los deltas se calculan contra este escenario."
+        ]),
+      ]),
+      el("div", {}, [
+        el("div", { style: { fontWeight: "700", marginBottom: "6px" } }, ["Escenarios a comparar (multi)"]),
+        multi,
+      ]),
+    ]),
+    el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" } }, [
+      btnRun, btnPickAll, btnPickNone
+    ]),
+  ]);
+
+  const out = section("Resultados de comparación", [
+    el("div", { id: "cmpMsg", style: { marginBottom: "10px" } }),
+    el("div", { id: "cmpTable", style: { overflow: "auto", border: "1px solid #ddd", borderRadius: "10px" } })
+  ]);
+
+  host.appendChild(top);
+  host.appendChild(out);
+}
+
 function buildJSONView(host) {
   const txt = el("textarea", { id: "jsonArea", style: { width: "100%", height: "260px", fontFamily: "ui-monospace, Consolas, monospace", fontSize: "12px" } });
   const file = el("input", { id: "jsonFile", type: "file", accept: ".json" });
@@ -464,13 +405,13 @@ function buildJSONView(host) {
     ]),
     txt,
     el("div", { style: { fontSize: "12px", opacity: "0.85", marginTop: "8px" } }, [
-      "Tip: este JSON es el equivalente a tu export/import de Streamlit."
+      "Tip: este JSON es compatible con tu export/import de Streamlit (shape equivalente)."
     ])
   ]));
 }
 
 /* --------------------------
-   7) UI <-> State
+   6) UI <-> State
 ---------------------------*/
 function readNum(id, def = 0) {
   const e = byId(id);
@@ -533,7 +474,8 @@ function readStateFromUI() {
   S.wacc.spread = readNum("spread", S.wacc.spread);
   S.wacc.tax_rate = readNum("wacc_tax_rate", S.wacc.tax_rate);
 
-  S.capex = readCapexFromTable();
+  const cap0 = readNum("capex0_amount", S.capex[0].amount);
+  S.capex = [{ month_index: 0, item: "Inversión inicial", amount: cap0 }];
 
   S.fin.enabled = readBool("fin_enabled", S.fin.enabled);
   S.fin.debt_amount_0 = readNum("debt_amount_0", S.fin.debt_amount_0);
@@ -580,7 +522,8 @@ function writeStateToUI(S) {
   writeVal("spread", S.wacc.spread);
   writeVal("wacc_tax_rate", S.wacc.tax_rate);
 
-  renderCapexTable(S.capex);
+  const cap0 = (S.capex && S.capex[0]) ? S.capex[0].amount : DEFAULT_STATE.capex[0].amount;
+  writeVal("capex0_amount", cap0);
 
   writeVal("fin_enabled", S.fin.enabled);
   writeVal("debt_amount_0", S.fin.debt_amount_0);
@@ -592,7 +535,7 @@ function writeStateToUI(S) {
 }
 
 /* --------------------------
-   8) Validación
+   7) Validación
 ---------------------------*/
 function validateInputs(S) {
   const errors = [];
@@ -621,16 +564,6 @@ function validateInputs(S) {
     if (!["french", "german"].includes(S.fin.amortization_type)) errors.push("Sistema debe ser french/german.");
   }
 
-  // CapEx validation
-  if (!Array.isArray(S.capex) || S.capex.length === 0) {
-    warns.push("CapEx vacío: se asume 0.");
-  } else {
-    for (const r of S.capex) {
-      if (!Number.isFinite(r.month_index) || r.month_index < 0) errors.push("CapEx: month_index no puede ser negativo.");
-      if (!Number.isFinite(r.amount)) errors.push("CapEx: amount inválido.");
-    }
-  }
-
   return { errors, warns };
 }
 
@@ -651,7 +584,7 @@ function renderMessages(errors, warns) {
 }
 
 /* --------------------------
-   9) Render resultados
+   8) Render resultados
 ---------------------------*/
 function setText(id, text) {
   const n = byId(id);
@@ -712,8 +645,8 @@ function renderTable(df) {
   }
 
   const cols = Object.keys(df[0]);
-
   const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
+
   const thead = el("thead");
   const trh = el("tr");
   for (const c of cols) {
@@ -742,7 +675,7 @@ function renderTable(df) {
 }
 
 /* --------------------------
-   10) Cálculo principal
+   9) Cálculo principal
 ---------------------------*/
 function doCalc() {
   if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
@@ -762,8 +695,10 @@ function doCalc() {
   renderKPIs(res);
   renderTable(res.df);
 
+  // ir a Resultados
   byId("tabResults").click();
 
+  // actualizar JSON view
   const payload = { ...deepClone(S), meta: { exported_at: new Date().toISOString() } };
   const area = byId("jsonArea");
   if (area) area.value = JSON.stringify(payload, null, 2);
@@ -772,7 +707,7 @@ function doCalc() {
 }
 
 /* --------------------------
-   11) Escenarios
+   10) Escenarios
 ---------------------------*/
 function refreshScenarioList(selected = "") {
   const list = byId("scList");
@@ -806,6 +741,7 @@ function saveScenario() {
   setIndex([...idx]);
 
   refreshScenarioList(name);
+  refreshCompareUI();
   doCalc();
 }
 
@@ -837,18 +773,18 @@ function deleteScenario() {
   localStorage.removeItem(DATA_PREFIX + name);
   setIndex(getIndex().filter(n => n !== name));
   refreshScenarioList("");
+  refreshCompareUI();
 }
 
 function newScenario() {
-  const init = deepClone(DEFAULT_STATE);
-  writeStateToUI(init);
+  writeStateToUI(deepClone(DEFAULT_STATE));
   byId("scName").value = "";
-  renderWaccCaption(init);
+  renderWaccCaption(readStateFromUI());
   renderMessages([], []);
 }
 
 /* --------------------------
-   12) JSON Import/Export
+   11) JSON Import/Export
 ---------------------------*/
 function exportJSONToArea() {
   const S = readStateFromUI();
@@ -902,19 +838,233 @@ function loadJSONFile() {
 }
 
 /* --------------------------
+   12) Comparación de escenarios
+---------------------------*/
+function refreshCompareUI() {
+  const base = byId("cmpBase");
+  const multi = byId("cmpMulti");
+  if (!base || !multi) return;
+
+  const names = getIndex().slice().sort((a, b) => a.localeCompare(b));
+
+  base.innerHTML = "";
+  multi.innerHTML = "";
+
+  if (names.length === 0) {
+    base.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
+    multi.appendChild(el("option", { value: "" }, ["(sin escenarios)"]));
+    return;
+  }
+
+  for (const n of names) {
+    base.appendChild(el("option", { value: n }, [n]));
+    multi.appendChild(el("option", { value: n }, [n]));
+  }
+
+  // default: el primero como base; y todos seleccionados en multi
+  base.value = names[0];
+  for (const opt of multi.options) opt.selected = true;
+}
+
+function loadScenarioStateByName(name) {
+  const raw = localStorage.getItem(DATA_PREFIX + name);
+  if (!raw) return null;
+  try {
+    const payload = JSON.parse(raw);
+    if (!payload || !payload.S) return null;
+    return payload.S;
+  } catch {
+    return null;
+  }
+}
+
+function computeResFromState(S) {
+  const { errors } = validateInputs(S);
+  if (errors.length) return { ok: false, errors, res: null };
+  const res = window.FinanceEngine.buildCashflowTable(S);
+  return { ok: true, errors: [], res };
+}
+
+function renderCompareTable(rows, baseName) {
+  const host = byId("cmpTable");
+  host.innerHTML = "";
+
+  if (!rows.length) {
+    host.appendChild(el("div", { style: { padding: "12px" } }, ["Sin datos."]));
+    return;
+  }
+
+  const cols = [
+    "Escenario",
+    "VAN",
+    "Δ VAN vs base",
+    "TIR anual",
+    "Δ TIR vs base",
+    "WACC anual",
+    "Payback",
+    "DSCR min",
+    "Buffer equity"
+  ];
+
+  const table = el("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "12px" } });
+
+  const thead = el("thead");
+  const trh = el("tr");
+  for (const c of cols) {
+    trh.appendChild(el("th", {
+      style: { borderBottom: "1px solid #ddd", padding: "8px", position: "sticky", top: "0", background: "#fff" }
+    }, [c]));
+  }
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = el("tbody");
+  for (const r of rows) {
+    const tr = el("tr");
+    const isBase = r.name === baseName;
+
+    const cellStyle = {
+      borderBottom: "1px solid #f0f0f0",
+      padding: "6px 8px",
+      background: isBase ? "#f6fffb" : ""
+    };
+
+    const add = (txt) => tr.appendChild(el("td", { style: cellStyle }, [txt]));
+
+    add(r.name);
+    add(fmtMoney(r.van));
+    add(isFiniteNum(r.deltaVan) ? fmtMoney(r.deltaVan) : "N/D");
+    add(r.tirA === null ? "N/D" : fmtPct(r.tirA));
+    add(isFiniteNum(r.deltaTir) ? (r.deltaTir * 100).toFixed(2) + " pp" : "N/D");
+    add(fmtPct(r.waccA));
+    add(r.payback === null ? "N/D" : String(r.payback));
+    add(r.dscrMin === null ? "N/D" : fmtMaybeNumber(r.dscrMin, 2));
+    add(fmtMoney(r.buffer));
+
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+function runCompare() {
+  if (!window.FinanceEngine || !window.FinanceEngine.buildCashflowTable) {
+    alert("No se cargó engine.js (FinanceEngine).");
+    return;
+  }
+
+  const base = byId("cmpBase").value;
+  const multi = byId("cmpMulti");
+  const picked = Array.from(multi.selectedOptions).map(o => o.value).filter(Boolean);
+
+  const msg = byId("cmpMsg");
+  msg.innerHTML = "";
+
+  if (!base) {
+    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
+      ["Elegí un escenario base."]));
+    return;
+  }
+  if (picked.length === 0) {
+    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
+      ["Seleccioná al menos un escenario para comparar."]));
+    return;
+  }
+
+  const baseS = loadScenarioStateByName(base);
+  if (!baseS) {
+    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5" } },
+      ["No pude leer el escenario base desde localStorage."]));
+    return;
+  }
+
+  const baseOut = computeResFromState(baseS);
+  if (!baseOut.ok) {
+    msg.appendChild(el("div", { style: { padding: "10px", borderRadius: "10px", border: "1px solid #d00", background: "#fff5f5", whiteSpace: "pre-wrap" } },
+      ["El escenario base tiene errores:\n- " + baseOut.errors.join("\n- ")]));
+    return;
+  }
+
+  const baseRes = baseOut.res;
+  const rows = [];
+
+  for (const name of picked) {
+    const S = loadScenarioStateByName(name);
+    if (!S) continue;
+
+    const out = computeResFromState(S);
+    if (!out.ok) {
+      rows.push({
+        name,
+        van: NaN, deltaVan: NaN,
+        tirA: null, deltaTir: NaN,
+        waccA: NaN, payback: null, dscrMin: null, buffer: NaN,
+        _error: out.errors
+      });
+      continue;
+    }
+
+    const r = out.res;
+
+    const van = r.van;
+    const tirA = r.tir_a; // puede ser null
+    const deltaVan = isFiniteNum(van) && isFiniteNum(baseRes.van) ? (van - baseRes.van) : NaN;
+    const deltaTir = (tirA !== null && baseRes.tir_a !== null) ? (tirA - baseRes.tir_a) : NaN;
+
+    rows.push({
+      name,
+      van,
+      deltaVan,
+      tirA,
+      deltaTir,
+      waccA: r.wacc_a,
+      payback: r.payback,
+      dscrMin: r.dscr_min,
+      buffer: r.buffer_required
+    });
+  }
+
+  // Orden: base primero, luego por VAN desc
+  rows.sort((a, b) => {
+    if (a.name === base) return -1;
+    if (b.name === base) return 1;
+    const av = isFiniteNum(a.van) ? a.van : -Infinity;
+    const bv = isFiniteNum(b.van) ? b.van : -Infinity;
+    return bv - av;
+  });
+
+  msg.appendChild(el("div", {
+    style: { padding: "10px", borderRadius: "10px", border: "1px solid #999", background: "#f7f7ff" }
+  }, [`Base: "${base}". Comparando ${rows.length} escenario(s).`]));
+
+  renderCompareTable(rows, base);
+}
+
+function pickAllCompare() {
+  const multi = byId("cmpMulti");
+  if (!multi) return;
+  for (const opt of multi.options) opt.selected = !!opt.value;
+}
+function pickNoneCompare() {
+  const multi = byId("cmpMulti");
+  if (!multi) return;
+  for (const opt of multi.options) opt.selected = false;
+}
+
+/* --------------------------
    13) Wire up
 ---------------------------*/
 function wire() {
   ensureUI();
 
-  const init = deepClone(DEFAULT_STATE);
-  writeStateToUI(init);
-  renderWaccCaption(init);
+  writeStateToUI(deepClone(DEFAULT_STATE));
+  renderWaccCaption(readStateFromUI());
 
   refreshScenarioList("");
+  refreshCompareUI();
 
   byId("btnCalc").addEventListener("click", doCalc);
-  byId("btnReset").addEventListener("click", () => newScenario());
+  byId("btnReset").addEventListener("click", () => { newScenario(); });
 
   byId("btnSaveSc").addEventListener("click", saveScenario);
   byId("btnLoadSc").addEventListener("click", loadScenario);
@@ -926,20 +1076,17 @@ function wire() {
   byId("btnDownloadJSON").addEventListener("click", downloadJSON);
   byId("btnLoadFileJSON").addEventListener("click", loadJSONFile);
 
+  // Compare
+  byId("btnRunCompare").addEventListener("click", runCompare);
+  byId("btnPickAll").addEventListener("click", () => { pickAllCompare(); });
+  byId("btnPickNone").addEventListener("click", () => { pickNoneCompare(); });
+
   // WACC caption live
   const waccIds = ["e_pct","d_pct","rf","mrp","beta","spread","wacc_tax_rate"];
-  for (const id of waccIds) byId(id).addEventListener("input", () => renderWaccCaption(readStateFromUI()));
-
-  // CapEx buttons
-  byId("btnCapexAdd").addEventListener("click", () => {
-    const cur = readCapexFromTable();
-    cur.push({ month_index: 0, item: "CapEx", amount: 0 });
-    renderCapexTable(cur);
-  });
-
-  byId("btnCapexClear").addEventListener("click", () => {
-    renderCapexTable(deepClone(DEFAULT_STATE.capex));
-  });
+  for (const id of waccIds) {
+    const e = byId(id);
+    if (e) e.addEventListener("input", () => renderWaccCaption(readStateFromUI()));
+  }
 }
 
 window.addEventListener("load", wire);
