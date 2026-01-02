@@ -1,145 +1,60 @@
-// PWA offline
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/finanzas-pwa/sw.js");
-  });
-}
+<body>
+  <h1>Finanzas (offline)</h1>
 
-// DOM
-const ing = document.getElementById("ing");
-const egr = document.getElementById("egr");
-const out = document.getElementById("out");
+  <h3>Inputs</h3>
 
-const scName = document.getElementById("scName");
-const scList = document.getElementById("scList");
+  <label>
+    Ingresos (anual):
+    <input id="ing" type="number" placeholder="Ingresos">
+  </label>
+  <br><br>
 
-const btnCalc = document.getElementById("btn");
-const btnSave = document.getElementById("saveSc");
-const btnNew  = document.getElementById("newSc");
-const btnLoad = document.getElementById("loadSc");
-const btnDel  = document.getElementById("delSc");
+  <label>
+    Egresos (anual):
+    <input id="egr" type="number" placeholder="Egresos">
+  </label>
+  <br><br>
 
-// Storage keys
-const INDEX_KEY = "finanzas.scenarios.index"; // array de nombres
-const DATA_PREFIX = "finanzas.scenario.";     // finanzas.scenario.<name>
+  <label>
+    Inversión inicial (CapEx, t=0):
+    <input id="capex0" type="number" placeholder="Ej: 1000000">
+  </label>
+  <br><br>
 
-// Helpers
-function safeName(name) {
-  return (name || "").trim();
-}
+  <label>
+    Años:
+    <input id="years" type="number" min="1" step="1" value="5">
+  </label>
+  <br><br>
 
-function getIndex() {
-  try {
-    return JSON.parse(localStorage.getItem(INDEX_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
+  <label>
+    Tasa descuento anual (%):
+    <input id="rate" type="number" min="0" step="0.01" value="25">
+  </label>
+  <br><br>
 
-function setIndex(arr) {
-  localStorage.setItem(INDEX_KEY, JSON.stringify(arr));
-}
+  <button id="btn">Calcular</button>
+  <pre id="out"></pre>
 
-function refreshScenarioList(selected = "") {
-  const names = getIndex().sort((a, b) => a.localeCompare(b));
-  scList.innerHTML = "";
+  <hr>
 
-  if (names.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "(sin escenarios)";
-    scList.appendChild(opt);
-    return;
-  }
+  <h3>Escenarios</h3>
 
-  for (const n of names) {
-    const opt = document.createElement("option");
-    opt.value = n;
-    opt.textContent = n;
-    if (n === selected) opt.selected = true;
-    scList.appendChild(opt);
-  }
-}
+  <label>
+    Nombre:
+    <input id="scName" type="text" placeholder="Ej: Base enero">
+  </label>
+  <button id="saveSc">Guardar</button>
+  <button id="newSc">Nuevo</button>
 
-function calc() {
-  const ingresos = Number(ing.value || 0);
-  const egresos  = Number(egr.value || 0);
-  const fcff = ingresos - egresos;
-  out.textContent = JSON.stringify({ fcff }, null, 2);
-  return { ingresos, egresos, fcff };
-}
+  <br><br>
 
-// Actions
-btnCalc.addEventListener("click", () => {
-  calc();
-});
+  <label>
+    Cargar:
+    <select id="scList"></select>
+  </label>
+  <button id="loadSc">Cargar</button>
+  <button id="delSc">Eliminar</button>
 
-btnNew.addEventListener("click", () => {
-  ing.value = "";
-  egr.value = "";
-  scName.value = "";
-  out.textContent = "";
-  ing.focus();
-});
-
-btnSave.addEventListener("click", () => {
-  const name = safeName(scName.value);
-  if (!name) {
-    alert("Poné un nombre de escenario.");
-    scName.focus();
-    return;
-  }
-
-  const payload = {
-    ingresos: Number(ing.value || 0),
-    egresos: Number(egr.value || 0),
-    savedAt: new Date().toISOString()
-  };
-
-  // guardar data
-  localStorage.setItem(DATA_PREFIX + name, JSON.stringify(payload));
-
-  // actualizar index
-  const idx = new Set(getIndex());
-  idx.add(name);
-  setIndex([...idx]);
-
-  refreshScenarioList(name);
-  calc();
-});
-
-btnLoad.addEventListener("click", () => {
-  const name = scList.value;
-  if (!name) return;
-
-  const raw = localStorage.getItem(DATA_PREFIX + name);
-  if (!raw) {
-    alert("No se encontró el escenario (puede haber quedado desincronizado).");
-    return;
-  }
-
-  const data = JSON.parse(raw);
-  ing.value = data.ingresos ?? "";
-  egr.value = data.egresos ?? "";
-  scName.value = name;
-  calc();
-});
-
-btnDel.addEventListener("click", () => {
-  const name = scList.value;
-  if (!name) return;
-
-  const ok = confirm(`Eliminar escenario "${name}"?`);
-  if (!ok) return;
-
-  localStorage.removeItem(DATA_PREFIX + name);
-
-  const idx = getIndex().filter((n) => n !== name);
-  setIndex(idx);
-
-  refreshScenarioList("");
-  out.textContent = "";
-});
-
-// Init
-refreshScenarioList();
+  <script src="app.js"></script>
+</body>
